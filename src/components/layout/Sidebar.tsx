@@ -6,17 +6,18 @@ import { useAuthStore } from '@/store/useAuthStore'
 import { useModulePermissionsStore, type AppRole } from '@/store/useModulePermissionsStore'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 
-const navItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  {
-    name: 'Administration',
-    icon: SettingsIcon,
-    subItems: [
-      { name: 'Accounts', path: '/accounts', icon: UserCog },
-      { name: 'System Settings', path: '/settings', icon: SettingsIcon },
-    ]
-  }
-]
+import { useModuleOrderStore } from '@/store/useModuleOrderStore'
+import { useEffect } from 'react'
+
+const STATIC_MAIN_REGISTRY: Record<string, any> = {
+  'dashboard': { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  'administration': { name: 'Administration', icon: SettingsIcon }
+}
+
+const STATIC_SUB_REGISTRY: Record<string, any> = {
+  'admin/accounts': { name: 'Accounts', path: '/accounts', icon: UserCog },
+  'admin/settings': { name: 'System Settings', path: '/settings', icon: SettingsIcon }
+}
 
 interface SidebarProps {
   isOpen?: boolean
@@ -30,7 +31,25 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { profile } = useAuthStore()
   const { appName, appIcon, appVersion, companyName } = useAppInfoStore()
   const { checkAccess } = useModulePermissionsStore()
+  const { mainOrder, subOrders, fetch: fetchModuleOrder } = useModuleOrderStore()
   const userRole = (profile?.role as AppRole) ?? null
+
+  useEffect(() => {
+    fetchModuleOrder()
+  }, [fetchModuleOrder])
+
+  const navItems = mainOrder.map(mainKey => {
+    const mainDef = STATIC_MAIN_REGISTRY[mainKey]
+    if (!mainDef) return null
+
+    const subs = subOrders[mainKey]
+    if (subs && subs.length > 0) {
+      const subItems = subs.map(subKey => STATIC_SUB_REGISTRY[subKey]).filter(Boolean)
+      return { ...mainDef, subItems }
+    }
+
+    return mainDef
+  }).filter(Boolean)
 
   const filteredNavItems = navItems.map(item => {
     if (item.subItems) {

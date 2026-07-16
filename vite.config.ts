@@ -58,4 +58,70 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Use esbuild for fast minification (default in Vite 5+)
+    minify: 'esbuild',
+    // Raise chunk warning limit to avoid noise from large vendor splits
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libraries into separate cacheable chunks
+        manualChunks(id) {
+          // Core React runtime — loaded first, cached forever
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor-react'
+          }
+          // Supabase — large SDK, rarely changes
+          if (id.includes('node_modules/@supabase/')) {
+            return 'vendor-supabase'
+          }
+          // Recharts + dependencies
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) {
+            return 'vendor-charts'
+          }
+          // Leaflet map library
+          if (id.includes('node_modules/leaflet')) {
+            return 'vendor-maps'
+          }
+          // PDF / document generation (large, only used on demand)
+          if (
+            id.includes('node_modules/jspdf') ||
+            id.includes('node_modules/jspdf-autotable') ||
+            id.includes('node_modules/html2canvas') ||
+            id.includes('node_modules/docx') ||
+            id.includes('node_modules/xlsx')
+          ) {
+            return 'vendor-documents'
+          }
+          // QR code libraries
+          if (id.includes('node_modules/qrcode') || id.includes('node_modules/html5-qrcode')) {
+            return 'vendor-qr'
+          }
+          // Lucide icons (large icon set)
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons'
+          }
+          // Router
+          if (id.includes('node_modules/react-router')) {
+            return 'vendor-router'
+          }
+          // All remaining node_modules into a shared vendor chunk
+          if (id.includes('node_modules/')) {
+            return 'vendor-misc'
+          }
+        },
+      },
+    },
+  },
+  // Optimise cold-start in dev: pre-bundle known heavy deps
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@supabase/supabase-js',
+      'zustand',
+      'lucide-react',
+    ],
+  },
 })

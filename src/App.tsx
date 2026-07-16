@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -8,25 +8,38 @@ import { useModulePermissionsStore } from '@/store/useModulePermissionsStore'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 import { usePWAStore } from '@/store/usePWAStore'
 import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
-import Dashboard from './pages/Dashboard'
-import Settings from './pages/settings/Settings'
-import AccountCreate from './pages/accounts/AccountCreate'
-import AccountEdit from './pages/accounts/AccountEdit'
-import AccountsList from './pages/accounts/AccountsList'
+import { Truck } from 'lucide-react'
+import { registerSession } from '@/lib/sessionManager'
+import { Toaster } from 'react-hot-toast'
+import ReloadPrompt from './components/layout/ReloadPrompt'
+import SystemUpdateBanner from './components/layout/SystemUpdateBanner'
+
+// ── Eagerly load only the shell (Layout + auth pages) ──────────────────────
 import Layout from './components/layout/Layout'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import AuthCallback from './pages/auth/AuthCallback'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import TermsOfService from './pages/TermsOfService'
-import Support from './pages/Support'
-import { Truck } from 'lucide-react'
-import { registerSession } from '@/lib/sessionManager'
-import { Toaster } from 'react-hot-toast'
-import ReloadPrompt from './components/layout/ReloadPrompt'
-import SystemUpdateBanner from './components/layout/SystemUpdateBanner'
+
+// ── Lazily load all content pages — only downloaded when first visited ──────
+const Dashboard      = lazy(() => import('./pages/Dashboard'))
+const Settings       = lazy(() => import('./pages/settings/Settings'))
+const AccountCreate  = lazy(() => import('./pages/accounts/AccountCreate'))
+const AccountEdit    = lazy(() => import('./pages/accounts/AccountEdit'))
+const AccountsList   = lazy(() => import('./pages/accounts/AccountsList'))
+const PrivacyPolicy  = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const Support        = lazy(() => import('./pages/Support'))
+
+// Minimal inline fallback — avoids layout shift while lazy chunks load
+function PageSpinner() {
+  return (
+    <div className="flex h-full w-full items-center justify-center py-24">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+    </div>
+  )
+}
 
 function App() {
   const { user, setUser, fetchProfile } = useAuthStore()
@@ -137,7 +150,6 @@ function App() {
     };
   }, []);
 
-
   // Apply theme on mount and whenever it changes
   useEffect(() => {
     applyTheme(theme, themeColor)
@@ -151,13 +163,18 @@ function App() {
   }, [theme, themeColor])
 
   useEffect(() => {
-    // Fetch maintenance mode state early so it's ready before any route renders
-    fetchMaintenanceMode()
+    // ── Fire all independent startup fetches in parallel ──────────────────
+    // Previously these ran sequentially; now they race concurrently so the
+    // slowest one determines total wait time instead of the sum of all.
+    Promise.all([
+      fetchMaintenanceMode(),
+      fetchModulePermissions(),
+      fetchAppInfo(),
+    ])
+
     // Subscribe to real-time maintenance mode changes so all active sessions
     // immediately see the maintenance page when an admin enables it.
     subscribeToMaintenanceMode()
-    fetchModulePermissions()
-    fetchAppInfo()
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -310,17 +327,33 @@ function App() {
           {/* Protected Routes inside Layout */}
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="dashboard" element={
+              <Suspense fallback={<PageSpinner />}><Dashboard /></Suspense>
+            } />
+            <Route path="settings" element={
+              <Suspense fallback={<PageSpinner />}><Settings /></Suspense>
+            } />
             
-            <Route path="accounts" element={<AccountsList />} />
-            <Route path="accounts/new" element={<AccountCreate />} />
-            <Route path="accounts/edit/:id" element={<AccountEdit />} />
+            <Route path="accounts" element={
+              <Suspense fallback={<PageSpinner />}><AccountsList /></Suspense>
+            } />
+            <Route path="accounts/new" element={
+              <Suspense fallback={<PageSpinner />}><AccountCreate /></Suspense>
+            } />
+            <Route path="accounts/edit/:id" element={
+              <Suspense fallback={<PageSpinner />}><AccountEdit /></Suspense>
+            } />
 
             {/* Public/Informational Routes inside Layout */}
-            <Route path="privacy" element={<PrivacyPolicy />} />
-            <Route path="terms" element={<TermsOfService />} />
-            <Route path="support" element={<Support />} />
+            <Route path="privacy" element={
+              <Suspense fallback={<PageSpinner />}><PrivacyPolicy /></Suspense>
+            } />
+            <Route path="terms" element={
+              <Suspense fallback={<PageSpinner />}><TermsOfService /></Suspense>
+            } />
+            <Route path="support" element={
+              <Suspense fallback={<PageSpinner />}><Support /></Suspense>
+            } />
           </Route>
         </Routes>
       </Router>
