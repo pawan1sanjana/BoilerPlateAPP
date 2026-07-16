@@ -53,7 +53,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const filteredNavItems = navItems.map(item => {
     if (item.subItems) {
-      const filteredSubItems = item.subItems.filter(sub => {
+      const filteredSubItems = item.subItems.filter((sub: any) => {
         return checkAccess(userRole, sub.path).allowed
       })
       return { ...item, subItems: filteredSubItems }
@@ -76,7 +76,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     setOpenDropdowns(prev => {
       const isCurrentlyOpen = prev[name] !== undefined
         ? prev[name]
-        : filteredNavItems.find(i => i.name === name)?.subItems?.some(sub => {
+        : filteredNavItems.find(i => i.name === name)?.subItems?.some((sub: any) => {
           if ((sub as any).exact) {
             return location.pathname === sub.path
           }
@@ -174,7 +174,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
                     {isOpen && (
                       <div className="pl-10 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                        {item.subItems.map((subItem) => (
+                        {item.subItems.map((subItem: any) => (
                           <NavLink
                              key={subItem.name}
                             to={subItem.path}
