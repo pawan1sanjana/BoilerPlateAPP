@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 
 /**
  * Parse the user-agent string to extract browser, OS, and device info.
@@ -97,6 +98,26 @@ export async function registerSession(userId: string, accessToken: string): Prom
 
     if (error) {
       console.error('Supabase upsert failed (this is expected if the table is not created yet):', error.message)
+      return
+    }
+
+    // Enforce maxConcurrentSessions
+    const maxSessions = useSecurityPolicyStore.getState().policy.maxConcurrentSessions
+    
+    const { data: activeSessions } = await supabase
+      .from('user_sessions')
+      .select('id')
+      .eq('user_id', userId)
+      .order('last_active', { ascending: false })
+
+    if (activeSessions && activeSessions.length > maxSessions) {
+      const sessionsToDelete = activeSessions.slice(maxSessions).map(s => s.id)
+      if (sessionsToDelete.length > 0) {
+        await supabase
+          .from('user_sessions')
+          .delete()
+          .in('id', sessionsToDelete)
+      }
     }
   } catch (err) {
     console.warn('Failed to register session:', err)
@@ -118,25 +139,42 @@ export async function deregisterSession(accessToken: string): Promise<void> {
   }
 }
 
-/**
- * Fetch all active sessions for a given user.
- * Returns them sorted by last_active DESC, with current session marked.
- */
-export async function fetchUserSessions(userId: string, currentAccessToken: string) {
+export async function fetchUserSessions(userId: string, currentAccessToken: string, isAdmin: boolean = false) {
   const currentToken = deriveSessionToken(currentAccessToken)
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('user_sessions')
     .select('*')
-    .eq('user_id', userId)
     .order('last_active', { ascending: false })
 
-  if (error) throw error
+  if (!isAdmin) {
+    query = query.eq('user_id', userId)
+  }
 
-  return (data ?? []).map((s: any) => ({
-    ...s,
-    current: s.session_token === currentToken,
-  }))
+  const { data: sessionData, error: sessionError } = await query
+  if (sessionError) throw sessionError
+
+  let usersMap = new Map<string, any>()
+  if (sessionData && sessionData.length > 0) {
+    const userIds = [...new Set(sessionData.map(s => s.user_id))]
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .in('id', userIds)
+    
+    if (!usersError && usersData) {
+      usersData.forEach(u => usersMap.set(u.id, u))
+    }
+  }
+
+  return (sessionData ?? []).map((s: any) => {
+    const user = usersMap.get(s.user_id)
+    return {
+      ...s,
+      current: s.session_token === currentToken,
+      user_name: user?.name || user?.email || 'Unknown User'
+    }
+  })
 }
 
 /**

@@ -1,44 +1,8 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
-import {
-  isBiometricAvailable,
-  registerBiometric,
-  authenticateWithBiometric,
-} from '@/lib/webauthn'
 
 // ─── localStorage keys ─────────────────────────────────────────────────────────
-const CREDENTIAL_KEY = 'app-biometric-credential'
-const SESSION_CACHE_KEY = 'app-biometric-session'
 const SETTING_KEY = 'biometric_login_enabled'
-
-// ─── Stored credential shape ───────────────────────────────────────────────────
-interface StoredCredential {
-  credentialId: string
-  userId: string
-  email: string
-}
-
-function getStoredCredential(): StoredCredential | null {
-  try {
-    const raw = localStorage.getItem(CREDENTIAL_KEY)
-    return raw ? (JSON.parse(raw) as StoredCredential) : null
-  } catch {
-    return null
-  }
-}
-
-function saveStoredCredential(cred: StoredCredential) {
-  try {
-    localStorage.setItem(CREDENTIAL_KEY, JSON.stringify(cred))
-  } catch {}
-}
-
-function clearStoredCredential() {
-  try {
-    localStorage.removeItem(CREDENTIAL_KEY)
-    localStorage.removeItem(SESSION_CACHE_KEY)
-  } catch {}
-}
 
 // ─── Store interface ───────────────────────────────────────────────────────────
 interface BiometricState {
@@ -46,72 +10,76 @@ interface BiometricState {
   biometricEnabled: boolean
   /** Is the current device/browser capable of biometric auth? */
   isSupported: boolean
-  /** Does this device already have a registered passkey? */
+  /** Does the current user have any passkeys enrolled? */
   hasCredential: boolean
   isLoading: boolean
 
   /** Detect browser/device WebAuthn support */
   checkSupport: () => Promise<void>
-  /** Fetch the global enabled flag from system_settings */
+  /** Fetch the global enabled flag from system_settings and check user's passkeys */
   fetch: () => Promise<void>
   /** Admin toggle — enable or disable biometrics system-wide */
   setBiometricEnabled: (value: boolean) => Promise<boolean>
 
   /**
-   * Register a passkey for the current device.
-   * Must be called while the user is already authenticated (after email+password login).
-   * @param refreshToken The current Supabase refresh_token to cache for future biometric logins
+   * Register a native passkey for the current authenticated user.
    */
-  register: (
-    userId: string,
-    userName: string,
-    userEmail: string,
-    refreshToken: string,
-  ) => Promise<boolean>
+  register: () => Promise<boolean>
 
   /**
-   * Authenticate via biometric on this device.
-   * Returns the stored user info and cached refresh token on success, null if cancelled.
+   * Authenticate via passkey.
+   * Returns true if successful (and Supabase SDK will automatically update the session).
    */
-  authenticate: () => Promise<{
-    userId: string
-    email: string
-    refreshToken: string | null
-  } | null>
+  authenticate: () => Promise<boolean>
 
-  /** Remove the passkey from this device and from Supabase */
+  /** Remove all passkeys for the current user */
   removeCredential: () => Promise<boolean>
-
-  /** Cache the current session refresh token for biometric logins */
-  cacheSession: (refreshToken: string) => void
-
-  /** Get the cached refresh token (used during biometric login) */
-  getCachedRefreshToken: () => string | null
 }
 
 // ─── Store ─────────────────────────────────────────────────────────────────────
-export const useBiometricStore = create<BiometricState>((set, get) => ({
+export const useBiometricStore = create<BiometricState>((set) => ({
   biometricEnabled: true,
   isSupported: false,
-  hasCredential: !!getStoredCredential(),
+  hasCredential: false,
   isLoading: true,
 
   checkSupport: async () => {
-    const supported = await isBiometricAvailable()
+    // Basic check for WebAuthn support
+    let supported = typeof window !== 'undefined' && !!(navigator.credentials && window.PublicKeyCredential)
+    
+    if (supported && window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+      try {
+        supported = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      } catch (e) {
+        console.warn('Failed to check platform authenticator availability', e)
+      }
+    }
+    
     set({ isSupported: supported })
   },
 
   fetch: async () => {
     try {
+      // 1. Fetch system setting
       const { data } = await supabase
         .from('system_settings')
         .select('value')
         .eq('key', SETTING_KEY)
         .maybeSingle()
 
-      // Default to enabled if the row doesn't exist yet
       const enabled = data ? data.value !== 'false' : true
-      set({ biometricEnabled: enabled, isLoading: false })
+      
+      // 2. Fetch if user has passkeys
+      let hasPasskey = false
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const { data: passkeys } = await supabase.auth.passkey.list()
+        if (passkeys && passkeys.length > 0) {
+          hasPasskey = true
+        }
+      }
+
+      set({ biometricEnabled: enabled, hasCredential: hasPasskey, isLoading: false })
     } catch {
       set({ isLoading: false })
     }
@@ -132,105 +100,44 @@ export const useBiometricStore = create<BiometricState>((set, get) => ({
     }
   },
 
-  register: async (userId, userName, userEmail, refreshToken) => {
+  register: async () => {
     try {
-      const { credentialId, publicKey } = await registerBiometric(userId, userName, userEmail)
-
-      // Detect device type for the admin's display in passkey_credentials
-      const deviceName = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
-        ? 'Mobile Device'
-        : /Mac/i.test(navigator.userAgent)
-        ? 'Mac (Touch ID)'
-        : /Win/i.test(navigator.userAgent)
-        ? 'Windows (Hello)'
-        : 'Desktop'
-
-      // Persist to Supabase (for admin management, visibility, and last-used tracking)
-      const { error: dbError } = await supabase
-        .from('passkey_credentials')
-        .upsert(
-          {
-            user_id: userId,
-            credential_id: credentialId,
-            public_key: publicKey,
-            device_name: deviceName,
-            last_used_at: new Date().toISOString(),
-          },
-          { onConflict: 'credential_id' },
-        )
-
-      if (dbError) {
-        console.warn('Could not save passkey to Supabase (may not exist yet):', dbError.message)
-        // Continue anyway — local-only registration still works
-      }
-
-      // Persist credential identifier locally
-      saveStoredCredential({ credentialId, userId, email: userEmail })
-
-      // Cache the refresh token behind the biometric gate
-      try {
-        localStorage.setItem(SESSION_CACHE_KEY, refreshToken)
-      } catch {}
+      const { error } = await supabase.auth.registerPasskey()
+      if (error) throw error
 
       set({ hasCredential: true })
       return true
     } catch (err: any) {
-      if (err.name === 'NotAllowedError') {
-        // User cancelled the biometric prompt — not an error
-        return false
-      }
       console.error('Biometric registration failed:', err)
-      throw err
+      return false
     }
   },
 
   authenticate: async () => {
-    const stored = getStoredCredential()
-    if (!stored) return null
-
-    const success = await authenticateWithBiometric(stored.credentialId)
-    if (!success) return null
-
-    // Update last_used_at (non-critical, fire-and-forget)
-    supabase
-      .from('passkey_credentials')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('credential_id', stored.credentialId)
-      .then()
-
-    const refreshToken = get().getCachedRefreshToken()
-    return { userId: stored.userId, email: stored.email, refreshToken }
+    try {
+      const { data, error } = await supabase.auth.signInWithPasskey()
+      if (error) throw error
+      
+      return !!data.session
+    } catch (err: any) {
+      console.error('Biometric authentication failed:', err)
+      return false
+    }
   },
 
   removeCredential: async () => {
-    const stored = getStoredCredential()
     try {
-      if (stored) {
-        await supabase
-          .from('passkey_credentials')
-          .delete()
-          .eq('credential_id', stored.credentialId)
+      const { data: passkeys } = await supabase.auth.passkey.list()
+      if (passkeys) {
+        for (const pk of passkeys) {
+          await supabase.auth.passkey.delete({ passkeyId: pk.id })
+        }
       }
-    } catch (e) {
-      console.warn('Could not remove passkey from Supabase:', e)
-    } finally {
-      clearStoredCredential()
       set({ hasCredential: false })
-    }
-    return true
-  },
-
-  cacheSession: (refreshToken: string) => {
-    try {
-      localStorage.setItem(SESSION_CACHE_KEY, refreshToken)
-    } catch {}
-  },
-
-  getCachedRefreshToken: () => {
-    try {
-      return localStorage.getItem(SESSION_CACHE_KEY)
-    } catch {
-      return null
+      return true
+    } catch (e) {
+      console.warn('Could not remove passkey:', e)
+      return false
     }
   },
 }))

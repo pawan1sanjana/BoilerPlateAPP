@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Truck, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('')
@@ -42,8 +43,9 @@ export default function ResetPassword() {
     e.preventDefault()
     setError(null)
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.')
+    const minLen = useSecurityPolicyStore.getState().policy.minPasswordLength
+    if (password.length < minLen) {
+      setError(`Password must be at least ${minLen} characters long.`)
       return
     }
 
@@ -140,7 +142,7 @@ export default function ResetPassword() {
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Minimum 8 characters"
+                      placeholder={`Minimum ${useSecurityPolicyStore.getState().policy.minPasswordLength} characters`}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -185,8 +187,8 @@ export default function ResetPassword() {
 
                 {/* Password strength hints */}
                 <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5 pl-1">
-                  <li className={password.length >= 8 ? 'text-green-600 dark:text-green-400' : ''}>
-                    {password.length >= 8 ? '✓' : '•'} At least 8 characters
+                  <li className={password.length >= useSecurityPolicyStore.getState().policy.minPasswordLength ? 'text-green-600 dark:text-green-400' : ''}>
+                    {password.length >= useSecurityPolicyStore.getState().policy.minPasswordLength ? '✓' : '•'} At least {useSecurityPolicyStore.getState().policy.minPasswordLength} characters
                   </li>
                   <li className={confirmPassword && password === confirmPassword ? 'text-green-600 dark:text-green-400' : ''}>
                     {confirmPassword && password === confirmPassword ? '✓' : '•'} Passwords match

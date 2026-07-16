@@ -28,12 +28,16 @@ export default function SmtpTab() {
     }
   }
 
-  const handleTestEmail = () => {
+  const handleTestEmail = async () => {
     setIsTesting(true)
-    setTimeout(() => {
-      setIsTesting(false)
-      toast.error('Email sending failed. Please check your SMTP settings and ensure backend service is running.')
-    }, 1500)
+    const result = await useSmtpStore.getState().testConfig(draft)
+    setIsTesting(false)
+    
+    if (result.success) {
+      toast.success('Test email sent successfully! Please check your inbox.')
+    } else {
+      toast.error(result.error || 'Email sending failed. Please check your SMTP settings.')
+    }
   }
 
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(config)

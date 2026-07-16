@@ -7,7 +7,7 @@ import { useMaintenanceModeStore } from '@/store/useMaintenanceModeStore'
 import { useModulePermissionsStore } from '@/store/useModulePermissionsStore'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 import { usePWAStore } from '@/store/usePWAStore'
-import { useBiometricStore } from '@/store/useBiometricStore'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/settings/Settings'
 import AccountCreate from './pages/accounts/AccountCreate'
@@ -171,32 +171,14 @@ function App() {
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser && session?.access_token) {
         registerSession(currentUser.id, session.access_token)
         fetchProfile(currentUser.id);
-
-        // Keep the biometric-cached refresh token in sync with Supabase's
-        // rotating tokens. Without this, the cached token goes stale after the
-        // first background refresh, causing a 400 on biometric login.
-        if ((event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') && session.refresh_token) {
-          const { cacheSession, hasCredential } = useBiometricStore.getState()
-          if (hasCredential) {
-            cacheSession(session.refresh_token)
-          }
-        }
       } else {
         useAuthStore.getState().setProfile(null);
-
-        // When Supabase revokes or expires a session (force-logout, token
-        // expiry, etc.) it fires SIGNED_OUT after a failed internal refresh.
-        // Clear the biometric refresh-token cache so the next biometric login
-        // attempt doesn't replay the same stale token and get another 400.
-        if (event === 'SIGNED_OUT') {
-          localStorage.removeItem('app-biometric-session')
-        }
       }
     })
 
@@ -267,6 +249,38 @@ function App() {
       supabase.removeChannel(channel)
     }
   }, [user?.id])
+
+  // Session idle timeout
+  useEffect(() => {
+    let lastActivity = Date.now()
+
+    const updateActivity = () => {
+      lastActivity = Date.now()
+    }
+
+    const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart']
+    events.forEach(e => window.addEventListener(e, updateActivity, { passive: true }))
+
+    const interval = setInterval(() => {
+      const { user } = useAuthStore.getState()
+      if (!user) return
+
+      const policy = useSecurityPolicyStore.getState().policy
+      const timeoutMs = policy.sessionTimeoutMinutes * 60 * 1000
+
+      if (Date.now() - lastActivity > timeoutMs) {
+        sessionStorage.setItem('logout_reason', 'Session expired due to inactivity.')
+        supabase.auth.signOut().catch(() => {}).finally(() => {
+          useAuthStore.getState().signOut()
+        })
+      }
+    }, 60000)
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, updateActivity))
+      clearInterval(interval)
+    }
+  }, [])
 
   if (isLoading) {
     return (

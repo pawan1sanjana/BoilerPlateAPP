@@ -8,6 +8,8 @@ export default function Dashboard() {
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+
+
   return (
     <div className="space-y-7 animate-in fade-in duration-500 pb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
@@ -65,6 +67,7 @@ export default function Dashboard() {
             <Users className="w-6 h-6 text-slate-600 dark:text-slate-400 mb-2" />
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Accounts</span>
           </Link>
+
         </div>
       </div>
     </div>

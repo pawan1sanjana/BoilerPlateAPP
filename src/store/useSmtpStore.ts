@@ -28,6 +28,7 @@ interface SmtpState {
   isLoading: boolean
   fetch: () => Promise<void>
   saveConfig: (config: SmtpConfig) => Promise<boolean>
+  testConfig: (config: SmtpConfig) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useSmtpStore = create<SmtpState>((set) => ({
@@ -69,6 +70,21 @@ export const useSmtpStore = create<SmtpState>((set) => ({
     } catch (e) {
       console.error(e)
       return false
+    }
+  },
+  testConfig: async (config) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('test-smtp', {
+        body: { config }
+      })
+
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      
+      return { success: true }
+    } catch (e: any) {
+      console.error(e)
+      return { success: false, error: e.message || 'Failed to send test email' }
     }
   }
 }))

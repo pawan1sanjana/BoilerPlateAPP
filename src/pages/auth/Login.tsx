@@ -9,6 +9,7 @@ import { Truck, Fingerprint, Loader2 } from 'lucide-react'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 import { useSocialLoginStore } from '@/store/useSocialLoginStore'
 import { useBiometricStore } from '@/store/useBiometricStore'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -39,13 +40,11 @@ export default function Login() {
     fetch: fetchBiometric,
     register,
     authenticate,
-    cacheSession,
   } = useBiometricStore()
 
   // Biometric-specific state
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false)
   const [biometricLoading, setBiometricLoading] = useState(false)
-  const [pendingRefreshToken, setPendingRefreshToken] = useState<string | null>(null)
 
   useEffect(() => {
     fetchSocialLogin()
@@ -130,13 +129,56 @@ export default function Login() {
     // On success the browser redirects — no need to do anything further
   }
 
+  const checkLockout = () => {
+    const policy = useSecurityPolicyStore.getState().policy
+    const key = `auth_failures_${email.toLowerCase()}`
+    const failuresStr = localStorage.getItem(key)
+    if (!failuresStr) return false
+
+    const failures: number[] = JSON.parse(failuresStr)
+    const now = Date.now()
+    const lockoutDurationMs = policy.lockoutDurationMinutes * 60 * 1000
+
+    const recentFailures = failures.filter(time => now - time < lockoutDurationMs)
+    localStorage.setItem(key, JSON.stringify(recentFailures))
+
+    return recentFailures.length >= policy.maxLoginAttempts
+  }
+
+  const recordFailure = () => {
+    const key = `auth_failures_${email.toLowerCase()}`
+    const failuresStr = localStorage.getItem(key)
+    const failures: number[] = failuresStr ? JSON.parse(failuresStr) : []
+    failures.push(Date.now())
+    localStorage.setItem(key, JSON.stringify(failures))
+  }
+
+  const clearFailures = () => {
+    const key = `auth_failures_${email.toLowerCase()}`
+    localStorage.removeItem(key)
+  }
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (checkLockout()) {
+      const policy = useSecurityPolicyStore.getState().policy
+      setError(`Account locked due to too many failed attempts. Please try again in ${policy.lockoutDurationMinutes} minutes.`)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
       if (isSignUp) {
+        const minLen = useSecurityPolicyStore.getState().policy.minPasswordLength
+        if (password.length < minLen) {
+          setError(`Password must be at least ${minLen} characters long.`)
+          setLoading(false)
+          return
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -160,7 +202,11 @@ export default function Login() {
           email,
           password,
         })
-        if (error) throw error
+        if (error) {
+          recordFailure()
+          throw error
+        }
+        clearFailures()
         if (data.user) {
           const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
           if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel === 'aal1') {
@@ -175,12 +221,8 @@ export default function Login() {
           // After profile check succeeds, decide whether to offer biometric registration
           await checkProfileAndNavigate(data.user.id, async () => {
             if (biometricEnabled && isSupported && !hasCredential) {
-              const { data: { session } } = await supabase.auth.getSession()
-              if (session?.refresh_token) {
-                setPendingRefreshToken(session.refresh_token)
-                setShowBiometricPrompt(true)
-                return
-              }
+              setShowBiometricPrompt(true)
+              return
             }
             navigate('/dashboard')
           })
@@ -198,57 +240,18 @@ export default function Login() {
     setBiometricLoading(true)
     setError(null)
     try {
-      const result = await authenticate()
-      if (!result) {
-        // User cancelled the biometric dialog
+      const success = await authenticate()
+      if (!success) {
+        // User cancelled the biometric dialog or it failed
         return
       }
 
-      // ── Strategy ──────────────────────────────────────────────────────────────
-      // Supabase rotates refresh tokens on every auto-refresh.  If the app was
-      // reopened after a period of inactivity, Supabase will have already
-      // consumed (and rotated) the token we cached at last login — so using the
-      // cached token directly causes a 400.
-      //
-      // Fix: check if the Supabase JS client already holds a live session in its
-      // own storage.  If it does, the WebAuthn challenge already proved the user
-      // is who they say they are — just use that session directly and re-sync our
-      // cache.  Only fall back to the cached refresh token when there is no
-      // existing session.
-      // ─────────────────────────────────────────────────────────────────────────
-
-      const { data: { session: existingSession } } = await supabase.auth.getSession()
-
-      let finalSession = existingSession
-
-      if (!finalSession) {
-        // No live session — try restoring via the cached biometric refresh token
-        if (!result.refreshToken) {
-          setError('Biometric session has expired. Please sign in with your password to renew.')
-          if (result.email) setEmail(result.email)
-          return
-        }
-
-        const { data, error } = await supabase.auth.refreshSession({
-          refresh_token: result.refreshToken,
-        })
-
-        if (error || !data.session) {
-          // Clear the stale token so subsequent attempts don't keep hitting 400.
-          // The next password login will re-cache a fresh one.
-          localStorage.removeItem('app-biometric-session')
-          setError('Your biometric session has expired. Please sign in with your password.')
-          if (result.email) setEmail(result.email)
-          return
-        }
-
-        finalSession = data.session
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        await checkProfileAndNavigate(session.user.id)
+      } else {
+        setError('Session could not be established. Please sign in with your password.')
       }
-
-      // Keep our biometric cache in sync with whichever token we just used
-      cacheSession(finalSession.refresh_token)
-
-      await checkProfileAndNavigate(finalSession.user.id)
     } catch (err: any) {
       setError(err.message || 'Biometric authentication failed. Please use your password.')
     } finally {
@@ -258,32 +261,14 @@ export default function Login() {
 
   /** Called when the user accepts the "Enable Biometric Login?" prompt after password login. */
   const handleRegisterBiometric = async () => {
-    if (!pendingRefreshToken) {
-      navigate('/dashboard')
-      return
-    }
     setBiometricLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { navigate('/dashboard'); return }
-
-      const { data: profileData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      await register(
-        user.id,
-        profileData?.name || user.email || 'User',
-        user.email || '',
-        pendingRefreshToken,
-      )
-    } catch (err: any) {
-      // NotAllowedError means user cancelled — still go to dashboard
-      if (err.name !== 'NotAllowedError') {
-        console.error('Biometric registration error:', err)
+      const success = await register()
+      if (!success) {
+        console.warn('Biometric registration was cancelled or failed')
       }
+    } catch (err: any) {
+      console.error('Biometric registration error:', err)
     } finally {
       setBiometricLoading(false)
       navigate('/dashboard')
@@ -478,8 +463,8 @@ export default function Login() {
                     : (isSignUp ? 'Sign up' : 'Sign in')}
                 </Button>
 
-                {/* ── Biometric Login Button (shown when this device has a registered credential) ── */}
-                {!showMfa && !isSignUp && biometricEnabled && isSupported && hasCredential && (
+                {/* ── Biometric Login Button (shown if browser supports passkeys) ── */}
+                {!showMfa && !isSignUp && biometricEnabled && isSupported && (
                   <button
                     id="biometric-login-btn"
                     type="button"

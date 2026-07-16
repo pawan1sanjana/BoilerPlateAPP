@@ -6,21 +6,24 @@ import {
   Settings as SettingsIcon, Wrench, Lock, Loader2,
   Sun, Moon, Smartphone, Check, DollarSign, CheckCircle2,
   Image as ImageIcon, Type, QrCode, Download, Share2,
-  ShieldCheck, Globe2, ClipboardList, Database, Info, Fingerprint, HelpCircle
+  ShieldCheck, Globe2, ClipboardList, Database, Info, Fingerprint, HelpCircle, FileText, RefreshCw
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
 // Import new tabs
+import ReportExportTab from './tabs/ReportExportTab'
 import SecurityPolicyTab from './tabs/SecurityPolicyTab'
 import SmtpTab from './tabs/SmtpTab'
 import SystemPrefsTab from './tabs/SystemPrefsTab'
 import AuditLogTab from './tabs/AuditLogTab'
 import BackupTab from './tabs/BackupTab'
 import SystemInfoTab from './tabs/SystemInfoTab'
+import { TablePagination } from '@/components/TablePagination'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useThemeStore } from '@/store/useThemeStore'
 import { useCurrencyStore, type Currency } from '@/store/useCurrencyStore'
+import { useUnitsStore, type DistanceUnit, type VolumeUnit, type WeightUnit } from '@/store/useUnitsStore'
 import { subscribeToPushNotifications, unsubscribeFromPushNotifications, getPushSubscriptionStatus } from '@/lib/pushNotifications'
 import { fetchUserSessions, revokeSession } from '@/lib/sessionManager'
 import { useMaintenanceModeStore } from '@/store/useMaintenanceModeStore'
@@ -37,6 +40,7 @@ import {
   type AppRole,
   type ModuleKey,
 } from '@/store/useModulePermissionsStore'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 
 interface SectionHelpGuideProps {
   title: string
@@ -90,6 +94,7 @@ export default function Settings() {
   const { user } = useAuthStore()
   const { theme, setTheme, themeColor, setThemeColor } = useThemeStore()
   const { currency, setCurrency } = useCurrencyStore()
+  const { distanceUnit, volumeUnit, weightUnit, setDistanceUnit, setVolumeUnit, setWeightUnit } = useUnitsStore()
   const { isMaintenanceMode, setMaintenanceMode } = useMaintenanceModeStore()
   const { isInstallable, isInstalled, promptInstall } = usePWAStore()
   const { socialLoginEnabled, setSocialLoginEnabled, fetch: fetchSocialLogin } = useSocialLoginStore()
@@ -103,7 +108,6 @@ export default function Settings() {
     register: registerBiometricDevice,
     checkSupport,
     fetch: fetchBiometric,
-    cacheSession,
   } = useBiometricStore()
   const [isBiometricSaving, setIsBiometricSaving] = useState(false)
   const [biometricRegLoading, setBiometricRegLoading] = useState(false)
@@ -133,6 +137,13 @@ export default function Settings() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
+  // Camera state
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user')
+
   // Password and Validation
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [passwords, setPasswords] = useState({
@@ -142,6 +153,8 @@ export default function Settings() {
   
   // Sessions & Tabs
   const [sessions, setSessions] = useState<any[]>([])
+  const [sessionPage, setSessionPage] = useState(1)
+  const [sessionPageSize, setSessionPageSize] = useState(5)
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('profile')
   const [notifications, setNotifications] = useState({ push: false, email: true, sms: false })
@@ -172,12 +185,71 @@ export default function Settings() {
     return `${days} day${days !== 1 ? 's' : ''} ago`
   }
 
-  const loadSessions = async () => {
+  useEffect(() => {
+    return () => {
+      if (stream) stream.getTracks().forEach(track => track.stop())
+    }
+  }, [stream])
+
+  const startCamera = async (mode: 'user' | 'environment' = facingMode) => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not available.")
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } })
+      setStream(s)
+      if (videoRef.current) {
+        videoRef.current.srcObject = s
+      }
+      setCameraActive(true)
+      setFacingMode(mode)
+    } catch (err: any) {
+      toast.error(err.message || 'Could not access camera. Please check permissions.')
+    }
+  }
+
+  const switchCamera = () => {
+    const newMode = facingMode === 'user' ? 'environment' : 'user'
+    startCamera(newMode)
+  }
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        if (facingMode === 'user') {
+          ctx.translate(canvas.width, 0)
+          ctx.scale(-1, 1)
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg')
+        setAvatarPreview(dataUrl)
+        stopCamera()
+      }
+    }
+  }
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      setStream(null)
+    }
+    setCameraActive(false)
+  }
+
+  const loadSessions = async (isAdmin: boolean = false) => {
     if (!user) return
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
-      const data = await fetchUserSessions(user.id, session.access_token)
+      const data = await fetchUserSessions(user.id, session.access_token, isAdmin)
       const formatted = data.map((s: any) => ({
         ...s,
         time: s.current ? 'Active now' : formatRelativeTime(s.last_active),
@@ -233,7 +305,7 @@ export default function Settings() {
           setAvatarPreview(user.user_metadata.avatar_url)
         }
 
-        await loadSessions()
+        await loadSessions(userData?.role === 'admin')
 
         const pushStatus = await getPushSubscriptionStatus()
         
@@ -265,20 +337,8 @@ export default function Settings() {
   const handleRegisterBiometricInSettings = async () => {
     setBiometricRegLoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        toast.error('Session not found. Please sign in again.')
-        return
-      }
-      const ok = await registerBiometricDevice(
-        user!.id,
-        profile.name || 'User',
-        profile.email,
-        session.refresh_token,
-      )
+      const ok = await registerBiometricDevice()
       if (ok) {
-        // Keep the cached session token up to date
-        cacheSession(session.refresh_token)
         toast.success('Biometric login registered for this device!')
       }
     } catch (err: any) {
@@ -308,12 +368,13 @@ export default function Settings() {
       { id: 'profile', label: 'Profile Information', icon: User },
       { id: 'security', label: 'Security & Auth', icon: Shield },
       { id: 'preferences', label: 'Preferences', icon: Palette },
-      { id: 'currency', label: 'Currency Options', icon: DollarSign },
+      { id: 'currency', label: 'Currency & SI Units', icon: DollarSign },
       { id: 'sessions', label: 'Active Sessions', icon: Monitor }
     ]
     const filtered = baseTabs.filter(t => checkAccess(role, '/settings/' + t.id).allowed)
     if (role === 'admin') {
       filtered.push({ id: 'branding', label: 'App Branding', icon: ImageIcon })
+      filtered.push({ id: 'report_export', label: 'Report Settings', icon: FileText })
       filtered.push({ id: 'maintenance_mode', label: 'Maintenance Mode', icon: Wrench })
       filtered.push({ id: 'module_access', label: 'Module Access', icon: Lock })
       filtered.push({ id: 'security_policy', label: 'Security Policy', icon: ShieldCheck })
@@ -433,6 +494,11 @@ export default function Settings() {
   }
 
   const savePassword = async () => {
+    const minLen = useSecurityPolicyStore.getState().policy.minPasswordLength
+    if (passwords.new_password.length < minLen) {
+      toast.error(`Password must be at least ${minLen} characters long`)
+      return
+    }
     if (passwords.new_password !== passwords.confirm_password) {
       toast.error('New passwords do not match')
       return
@@ -647,7 +713,7 @@ export default function Settings() {
                 title="Profile Information"
                 steps={[
                   'Under the Profile Information tab, edit your full name and phone number fields.',
-                  'To change your profile picture, click on the avatar preview or hover and select a new image file.',
+                  'To change your profile picture, click on the avatar preview to upload a file, or click "Take Photo" to use your device camera.',
                   'Click the Save Profile button at the bottom of the section to apply changes.'
                 ]}
                 tips="Keeping your phone number updated ensures you receive real-time SMS notifications for critical updates."
@@ -672,7 +738,7 @@ export default function Settings() {
                       }
                     }}
                   />
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 p-1 overflow-hidden">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 p-1 overflow-hidden shrink-0">
                     <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center overflow-hidden">
                       {avatarPreview ? (
                         <img src={avatarPreview} alt="Avatar Preview" className="w-full h-full object-cover rounded-full" />
@@ -689,9 +755,18 @@ export default function Settings() {
                     <Camera size={24} className="text-white" />
                   </button>
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">{profile.name || 'System Administrator'}</h3>
-                  <p className="text-sm font-medium text-slate-400 mt-0.5">Role: <span className="capitalize">{profile.role || 'Super Admin'}</span></p>
+                <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">{profile.name || 'System Administrator'}</h3>
+                    <p className="text-sm font-medium text-slate-400 mt-0.5">Role: <span className="capitalize">{profile.role || 'Super Admin'}</span></p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => startCamera()}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition-all w-fit"
+                  >
+                    <Camera size={16} /> Take Photo
+                  </button>
                 </div>
               </div>
 
@@ -724,6 +799,10 @@ export default function Settings() {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'report_export' && (
+          <ReportExportTab />
         )}
 
           {activeTab === 'security' && (
@@ -929,7 +1008,7 @@ export default function Settings() {
 
               {/* Biometric Toggle — admin only */}
               {profile.role === 'admin' && (
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -969,6 +1048,22 @@ export default function Settings() {
                         />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Setup Guide for Admins */}
+                  <div className="p-4 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl">
+                    <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-400 mb-2 flex items-center gap-2">
+                      <Info size={16} /> Supabase Passkeys Setup Guide
+                    </h4>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                      For biometric authentication to work correctly, you must configure Passkeys in your Supabase Dashboard:
+                    </p>
+                    <ol className="list-decimal list-inside text-sm text-blue-700 dark:text-blue-300 space-y-1.5 ml-1">
+                      <li>Go to your Supabase Dashboard &rarr; <strong>Authentication</strong> &rarr; <strong>Passkeys</strong>.</li>
+                      <li>Toggle <strong>Enable Passkey authentication</strong>.</li>
+                      <li>Set the <strong>Relying Party ID</strong> to match your domain (e.g., <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">localhost</code> or <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">127.0.0.1</code>).</li>
+                      <li>Ensure your full URL (e.g., <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">http://localhost:5173</code>) is in the allowed Origins.</li>
+                    </ol>
                   </div>
                 </div>
               )}
@@ -1223,14 +1318,15 @@ export default function Settings() {
           {activeTab === 'currency' && (
             <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
               <SectionHelpGuide
-                title="Currency Options"
+                title="Currency & SI Units"
                 steps={[
-                  'Select your preferred currency (e.g., USD, EUR, GBP) from the dropdown list.',
-                  'The currency converter will automatically update views across dashboard statistics.'
+                  'Select your preferred currency (e.g., USD, EUR, GBP) from the options.',
+                  'Select your preferred SI units for distance, volume, and weight measurements.',
+                  'The system will automatically update views across dashboard statistics to reflect your choices.'
                 ]}
                 tips="This setting is personal to your profile and will not alter global database prices."
               />
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-8 shadow-sm">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <DollarSign size={18} className="text-blue-500" /> Currency Options
@@ -1264,9 +1360,63 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Type size={18} className="text-blue-500" /> SI Units Selection
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">Choose your preferred units for various measurements.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Distance Unit</label>
+                    <div className="flex gap-2">
+                      {(['km', 'mi'] as DistanceUnit[]).map((u) => (
+                        <button
+                          key={u}
+                          onClick={() => { setDistanceUnit(u); toast.success(`Distance unit changed to ${u}`) }}
+                          className={`flex-1 py-2 px-4 rounded-xl border-2 font-medium transition-all ${distanceUnit === u ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900'}`}
+                        >
+                          {u === 'km' ? 'Kilometers (km)' : 'Miles (mi)'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Volume Unit</label>
+                    <div className="flex gap-2">
+                      {(['L', 'gal'] as VolumeUnit[]).map((u) => (
+                        <button
+                          key={u}
+                          onClick={() => { setVolumeUnit(u); toast.success(`Volume unit changed to ${u}`) }}
+                          className={`flex-1 py-2 px-4 rounded-xl border-2 font-medium transition-all ${volumeUnit === u ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900'}`}
+                        >
+                          {u === 'L' ? 'Liters (L)' : 'Gallons (gal)'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Weight Unit</label>
+                    <div className="flex gap-2">
+                      {(['kg', 'lbs'] as WeightUnit[]).map((u) => (
+                        <button
+                          key={u}
+                          onClick={() => { setWeightUnit(u); toast.success(`Weight unit changed to ${u}`) }}
+                          className={`flex-1 py-2 px-4 rounded-xl border-2 font-medium transition-all ${weightUnit === u ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900'}`}
+                        >
+                          {u === 'kg' ? 'Kilograms (kg)' : 'Pounds (lbs)'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
           {activeTab === 'sessions' && (
             <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
@@ -1286,27 +1436,48 @@ export default function Settings() {
                 </h3>
               </div>
               <div className="space-y-4">
-                {sessions.map((session, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                        <Monitor size={20} className={session.current ? "text-blue-500" : "text-slate-400"} />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                          {session.device} • {session.browser}
-                          {session.current && <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[10px] uppercase font-bold rounded-full tracking-wider">Current</span>}
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-1">{session.os} • {session.ip_address} • Last active: {session.time}</p>
-                      </div>
-                    </div>
-                    {!session.current && (
-                      <button onClick={() => handleRevoke(session.id)} disabled={revokingId === session.id} className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-lg transition-colors">
-                        {revokingId === session.id ? 'Revoking...' : 'Revoke'}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {(() => {
+                  const paginatedSessions = sessions.slice((sessionPage - 1) * sessionPageSize, sessionPage * sessionPageSize);
+                  
+                  return (
+                    <>
+                      {paginatedSessions.map((session, i) => (
+                        <div key={session.id || i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                              <Monitor size={20} className={session.current ? "text-blue-500" : "text-slate-400"} />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                                {session.user_name} • {session.device} • {session.browser}
+                                {session.current && <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[10px] uppercase font-bold rounded-full tracking-wider">Current</span>}
+                              </h4>
+                              <p className="text-xs text-slate-500 mt-1">{session.os} • {session.ip_address} • Last active: {session.time}</p>
+                            </div>
+                          </div>
+                          {!session.current && (
+                            <button onClick={() => handleRevoke(session.id)} disabled={revokingId === session.id} className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-lg transition-colors">
+                              {revokingId === session.id ? 'Revoking...' : 'Revoke'}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+
+                      {sessions.length > 0 && (
+                        <div className="mt-4">
+                          <TablePagination
+                            page={sessionPage}
+                            setPage={setSessionPage}
+                            pageSize={sessionPageSize}
+                            setPageSize={setSessionPageSize}
+                            totalItems={sessions.length}
+                            pageSizeOptions={[5, 10, 25, 50]}
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1421,7 +1592,7 @@ export default function Settings() {
                    </div>
                  </div>
                  
-                 <div className="pt-2 flex justify-end">
+                 <div className="pt-2 flex justify-end mt-4">
                     <button 
                       onClick={handleSaveBranding} 
                       disabled={isBrandingSaving || !draftAppName.trim()} 
@@ -1811,6 +1982,50 @@ export default function Settings() {
 
         </div>
       </div>
+      
+      {cameraActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
+            <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white flex items-center gap-2">
+              <Camera size={20} className="text-blue-500" /> Take Photo
+            </h3>
+            <div className="relative w-full aspect-square bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-hidden mb-6 border border-slate-200 dark:border-slate-800 shadow-inner">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            <div className="flex justify-between items-center">
+              <button 
+                type="button" 
+                onClick={stopCamera} 
+                className="px-5 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={switchCamera} 
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl font-semibold flex items-center gap-2 transition-colors"
+                >
+                  <RefreshCw size={16} /> Switch
+                </button>
+                <button 
+                  type="button" 
+                  onClick={capturePhoto} 
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+                >
+                  <Camera size={16} /> Capture
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

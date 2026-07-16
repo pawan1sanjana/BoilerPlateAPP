@@ -7,6 +7,7 @@ export default function SystemInfoTab() {
   const { appName, appVersion, companyName } = useAppInfoStore()
   const [dbStatus, setDbStatus] = React.useState<'checking' | 'healthy' | 'error'>('checking')
   const [dbLatency, setDbLatency] = React.useState<number>(0)
+  const [deviceInfo, setDeviceInfo] = React.useState({ os: '', browser: '', screen: '' })
 
   React.useEffect(() => {
     const checkDb = async () => {
@@ -21,6 +22,33 @@ export default function SystemInfoTab() {
       }
     }
     checkDb()
+
+    // Parse device info
+    const ua = navigator.userAgent;
+    let browser = "Unknown Browser";
+    if (ua.includes("Firefox/")) browser = "Firefox";
+    else if (ua.includes("Edg/")) browser = "Edge";
+    else if (ua.includes("Chrome/")) browser = "Chrome";
+    else if (ua.includes("Safari/") && !ua.includes("Chrome/")) browser = "Safari";
+
+    let os = navigator.platform || 'Unknown OS';
+    if (ua.includes("Win")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("like Mac")) os = "iOS";
+
+    setDeviceInfo({
+      os,
+      browser,
+      screen: `${window.innerWidth}x${window.innerHeight}`
+    });
+
+    const handleResize = () => {
+      setDeviceInfo(prev => ({ ...prev, screen: `${window.innerWidth}x${window.innerHeight}` }));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [])
 
   return (
@@ -41,7 +69,7 @@ export default function SystemInfoTab() {
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Application</p>
               <h4 className="font-bold text-slate-900 dark:text-white mt-0.5">{appName}</h4>
-              <p className="text-xs text-slate-400 mt-1">Version {appVersion || '1.0.0'} (Production)</p>
+              <p className="text-xs text-slate-400 mt-1">Version {appVersion || '1.0.0'}</p>
               {companyName && <p className="text-xs text-slate-400 mt-0.5">By {companyName}</p>}
             </div>
           </div>
@@ -66,8 +94,8 @@ export default function SystemInfoTab() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Environment</p>
-              <h4 className="font-bold text-slate-900 dark:text-white mt-0.5">Production</h4>
-              <p className="text-xs text-slate-400 mt-1">Node environment</p>
+              <h4 className="font-bold text-slate-900 dark:text-white mt-0.5 capitalize">{import.meta.env.MODE || 'production'}</h4>
+              <p className="text-xs text-slate-400 mt-1">{import.meta.env.PROD ? 'Production build' : 'Development server'}</p>
             </div>
           </div>
 
@@ -77,8 +105,8 @@ export default function SystemInfoTab() {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Device</p>
-              <h4 className="font-bold text-slate-900 dark:text-white mt-0.5">{navigator.platform}</h4>
-              <p className="text-xs text-slate-400 mt-1 line-clamp-1" title={navigator.userAgent}>{navigator.userAgent.split(' ')[0]}</p>
+              <h4 className="font-bold text-slate-900 dark:text-white mt-0.5">{deviceInfo.os || 'Loading...'}</h4>
+              <p className="text-xs text-slate-400 mt-1" title={navigator.userAgent}>{deviceInfo.browser} ({deviceInfo.screen})</p>
             </div>
           </div>
         </div>

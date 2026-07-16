@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Truck, Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
 
 export default function Signup() {
   const [email, setEmail] = useState('')
@@ -22,8 +23,8 @@ export default function Signup() {
       return
     }
 
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters')
+    if (password.length < useSecurityPolicyStore.getState().policy.minPasswordLength) {
+      toast.error(`Password must be at least ${useSecurityPolicyStore.getState().policy.minPasswordLength} characters`)
       return
     }
 

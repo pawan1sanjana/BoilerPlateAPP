@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast'
 import { 
   Mail, MessageCircle, Phone, HelpCircle, Send, CheckCircle2, 
   AlertCircle, Loader2, Key, Palette, ShieldCheck, Inbox, 
-  ChevronDown, User, Lock, Laptop, Info, BookOpen
+  ChevronDown, User, Lock, Laptop, Info, BookOpen, Globe
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -449,7 +449,7 @@ export default function Support() {
                     <li>Navigate to the <span className="font-bold">Preferences</span> section in Settings.</li>
                     <li>Toggle theme modes between <span className="font-bold">Light</span>, <span className="font-bold">Dark</span>, or <span className="font-bold">System Default</span>.</li>
                     <li>Select an accent color (Blue, Green, Purple, Rose, Orange).</li>
-                    <li>To choose a localized currency system, switch to the <span className="font-bold">Currency Options</span> tab and pick your default currency.</li>
+                    <li>To choose a localized currency system or unit configuration, switch to the <span className="font-bold">Currency & SI Units</span> tab.</li>
                   </ol>
                 </CardContent>
               </Card>
@@ -518,36 +518,94 @@ export default function Support() {
                 </CardContent>
               </Card>
 
+              {/* Email / SMTP Configuration Card */}
+              {isAdmin && (
+                <Card className="border shadow-sm rounded-2xl transition-all duration-300 border-indigo-500/20 bg-indigo-500/5 hover:border-indigo-500/30">
+                  <CardHeader className="p-5 pb-3">
+                    <CardTitle className="text-base font-bold flex items-center justify-between text-slate-900 dark:text-white">
+                      <span className="flex items-center gap-2">
+                        <Mail size={18} className="text-indigo-600 dark:text-indigo-400" />
+                        Email &amp; SMTP Configuration
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                        Admins Only
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-0 text-xs text-slate-500 dark:text-slate-400 space-y-3 leading-relaxed">
+                    <p>
+                      Configure the outbound email server settings for system alerts and notifications. You can test your configuration before saving to ensure it works correctly.
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1.5 text-slate-700 dark:text-slate-300 font-medium pl-1">
+                      <li>Navigate to Settings &gt; <span className="font-bold">Email / SMTP Configuration</span>.</li>
+                      <li>Enter your SMTP server host, port, encryption method, username, and password.</li>
+                      <li>Click <span className="font-bold">Send Test Email</span> to trigger a real outgoing test email using edge functions.</li>
+                      <li className="text-slate-500 dark:text-slate-400 italic mt-2 text-[11px] list-none">
+                        Note: If testing via a local Supabase CLI, ensure edge functions are served and running using <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">supabase functions serve</code>.
+                      </li>
+                    </ol>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Admin Panel Features Card */}
-              <Card className={`border shadow-sm rounded-2xl transition-all duration-300 ${
-                isAdmin 
-                  ? 'border-indigo-500/20 bg-indigo-500/5 hover:border-indigo-500/30' 
-                  : 'border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 opacity-75'
-              }`}>
-                <CardHeader className="p-5 pb-3">
-                  <CardTitle className="text-base font-bold flex items-center justify-between text-slate-900 dark:text-white">
-                    <span className="flex items-center gap-2">
-                      <ShieldCheck size={18} className="text-indigo-600 dark:text-indigo-400" />
-                      Administrator Controls
-                    </span>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
-                      Admins Only
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 pt-0 text-xs text-slate-500 dark:text-slate-400 space-y-3 leading-relaxed">
-                  <p>
-                    Manage enterprise SMTP parameters, update white-label brand logos/text, toggle global maintenance settings, enable/disable social logins, or adjust access control.
-                  </p>
-                  <ul className="list-disc list-inside space-y-1.5 text-slate-700 dark:text-slate-300 font-medium pl-1">
-                    <li><span className="font-bold">Email / SMTP</span>: Manage outgoing host addresses, ports, and authorization keys.</li>
-                    <li><span className="font-bold">Social Logins</span>: Toggle whether users can register or sign in using Google or Facebook.</li>
-                    <li><span className="font-bold">App Branding</span>: Customize the system name, version number, and main branding icons.</li>
-                    <li><span className="font-bold">Maintenance Mode</span>: Block user entry for safe system changes.</li>
-                    <li><span className="font-bold">Module Access</span>: Tweak role-based permissions matrix.</li>
-                  </ul>
-                </CardContent>
-              </Card>
+              {isAdmin && (
+                <Card className="border shadow-sm rounded-2xl transition-all duration-300 border-indigo-500/20 bg-indigo-500/5 hover:border-indigo-500/30">
+                  <CardHeader className="p-5 pb-3">
+                    <CardTitle className="text-base font-bold flex items-center justify-between text-slate-900 dark:text-white">
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck size={18} className="text-indigo-600 dark:text-indigo-400" />
+                        Administrator Controls
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                        Admins Only
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-0 text-xs text-slate-500 dark:text-slate-400 space-y-3 leading-relaxed">
+                    <p>
+                      Manage enterprise SMTP parameters, update white-label brand logos/text, toggle global maintenance settings, enable/disable social logins, or adjust access control.
+                    </p>
+                    <ul className="list-disc list-inside space-y-1.5 text-slate-700 dark:text-slate-300 font-medium pl-1">
+                      <li><span className="font-bold">Email / SMTP</span>: Manage outgoing host addresses, ports, and authorization keys.</li>
+                      <li><span className="font-bold">Social Logins</span>: Toggle whether users can register or sign in using Google or Facebook.</li>
+                      <li><span className="font-bold">App Branding</span>: Customize the system name, version number, and main branding icons.</li>
+                      <li><span className="font-bold">Maintenance Mode</span>: Block user entry for safe system changes.</li>
+                      <li><span className="font-bold">Module Access</span>: Tweak role-based permissions matrix.</li>
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Social Logins Setup Card */}
+              {isAdmin && (
+                <Card className="border shadow-sm rounded-2xl transition-all duration-300 border-indigo-500/20 bg-indigo-500/5 hover:border-indigo-500/30">
+                  <CardHeader className="p-5 pb-3">
+                    <CardTitle className="text-base font-bold flex items-center justify-between text-slate-900 dark:text-white">
+                      <span className="flex items-center gap-2">
+                        <Globe size={18} className="text-indigo-600 dark:text-indigo-400" />
+                        Supabase Social Logins Setup
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                        Admins Only
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-0 text-xs text-slate-500 dark:text-slate-400 space-y-3 leading-relaxed">
+                    <p>
+                      Configure OAuth providers (like Google, Facebook, etc.) in your Supabase project to allow users to sign in with their social accounts.
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1.5 text-slate-700 dark:text-slate-300 font-medium pl-1">
+                      <li>Log in to your <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Supabase Dashboard</a>.</li>
+                      <li>Navigate to <span className="font-bold">Authentication</span> &gt; <span className="font-bold">Providers</span>.</li>
+                      <li>Select the provider (e.g., Google) and click to enable it.</li>
+                      <li>Enter the <span className="font-bold">Client ID</span> and <span className="font-bold">Client Secret</span> obtained from the provider's developer console.</li>
+                      <li>Add the Supabase <span className="font-bold">Callback URI</span> to the provider's allowed redirect URIs.</li>
+                      <li>Click <span className="font-bold text-primary">Save</span>. Make sure Social Logins are enabled in this app's Security &amp; Auth settings.</li>
+                    </ol>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         )}
@@ -582,21 +640,35 @@ export default function Support() {
               onClick={() => setOpenFaq(openFaq === 'faq-sessions' ? null : 'faq-sessions')}
             />
 
-            <FaqItem
-              id="faq-smtp"
-              question="What should I do if outgoing notification emails are failing?"
-              answer="If users are not receiving invite codes or update alerts, a system administrator should navigate to Settings > Email / SMTP. Verify that the host address, port, and sender email details are correctly configured. Check your SMTP login username and password. You can trigger a 'Send Test Mail' command from this tab to diagnose email delivery failures in real time."
-              isOpen={openFaq === 'faq-smtp'}
-              onClick={() => setOpenFaq(openFaq === 'faq-smtp' ? null : 'faq-smtp')}
-            />
+            {isAdmin && (
+              <FaqItem
+                id="faq-smtp"
+                question="What should I do if outgoing notification emails are failing?"
+                answer="If users are not receiving invite codes or update alerts, a system administrator should navigate to Settings > Email / SMTP. Verify that the host address, port, and sender email details are correctly configured. Check your SMTP login username and password. You can trigger a 'Send Test Mail' command from this tab to diagnose email delivery failures in real time."
+                isOpen={openFaq === 'faq-smtp'}
+                onClick={() => setOpenFaq(openFaq === 'faq-smtp' ? null : 'faq-smtp')}
+              />
+            )}
 
-            <FaqItem
-              id="faq-maintenance"
-              question="What happens when an Administrator toggles Maintenance Mode?"
-              answer="When Maintenance Mode is turned on by an admin (Settings > Maintenance Mode), the system blocks all normal operations. Any non-admin users attempting to load the platform will be redirected to a dedicated maintenance screen explaining that updates are in progress. Active sessions for regular users will be temporarily suspended from data operations. Once the administrator turns maintenance off ('Go Live'), full service resumes immediately."
-              isOpen={openFaq === 'faq-maintenance'}
-              onClick={() => setOpenFaq(openFaq === 'faq-maintenance' ? null : 'faq-maintenance')}
-            />
+            {isAdmin && (
+              <FaqItem
+                id="faq-social-logins"
+                question="How do I configure Google or other Social Logins?"
+                answer="Social Logins are powered by Supabase Auth. To set them up, you need to first create an OAuth app in the provider's developer console (e.g., Google Cloud Console) to obtain a Client ID and Client Secret. Then, enter these credentials in your Supabase project under Authentication > Providers. Finally, make sure Social Logins are enabled in the application's Admin Settings panel."
+                isOpen={openFaq === 'faq-social-logins'}
+                onClick={() => setOpenFaq(openFaq === 'faq-social-logins' ? null : 'faq-social-logins')}
+              />
+            )}
+
+            {isAdmin && (
+              <FaqItem
+                id="faq-maintenance"
+                question="What happens when an Administrator toggles Maintenance Mode?"
+                answer="When Maintenance Mode is turned on by an admin (Settings > Maintenance Mode), the system blocks all normal operations. Any non-admin users attempting to load the platform will be redirected to a dedicated maintenance screen explaining that updates are in progress. Active sessions for regular users will be temporarily suspended from data operations. Once the administrator turns maintenance off ('Go Live'), full service resumes immediately."
+                isOpen={openFaq === 'faq-maintenance'}
+                onClick={() => setOpenFaq(openFaq === 'faq-maintenance' ? null : 'faq-maintenance')}
+              />
+            )}
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Shield, Mail, Lock, User, Camera, RefreshCw, Phone } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore';
 import toast from 'react-hot-toast';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -78,6 +79,13 @@ export default function AccountCreate() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const minLen = useSecurityPolicyStore.getState().policy.minPasswordLength;
+    if (formData.password.length < minLen) {
+      setError(`Password must be at least ${minLen} characters long`);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
