@@ -125,25 +125,27 @@ export function useBluetoothScale(): UseBluetoothScaleReturn {
       const serviceUuid = config?.serviceUuid ?? WEIGHT_SCALE_SERVICE
       const characteristicUuid = config?.characteristicUuid ?? WEIGHT_MEASUREMENT_CHAR
 
-      // Request BLE device — accept any device that has the weight scale service
-      // or any device if using custom UUIDs
-      const filters: RequestDeviceOptions = {
-        acceptAllDevices: false,
-        filters: [{ services: [serviceUuid] }],
-        optionalServices: [serviceUuid],
-      }
+      // Common proprietary Bluetooth Serial/Scale services
+      const COMMON_SERVICES = [
+        WEIGHT_SCALE_SERVICE,
+        '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / generic serial
+        '0000fff0-0000-1000-8000-00805f9b34fb', // Generic serial
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Proprietary
+      ]
+
+      const optionalServices = config?.serviceUuid ? [config.serviceUuid] : COMMON_SERVICES
+
+      // Request BLE device — accept all devices by default to ensure proprietary scales show up in the list
+      const requestOptions: RequestDeviceOptions = config?.serviceUuid
+        ? { filters: [{ services: [config.serviceUuid] }], optionalServices }
+        : { acceptAllDevices: true, optionalServices }
 
       let device: BluetoothDevice
       try {
-        device = await navigator.bluetooth.requestDevice(filters)
-        isStandardProtocol.current = serviceUuid === WEIGHT_SCALE_SERVICE
-      } catch {
-        // Fallback: accept all devices (user can manually pair)
-        device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [serviceUuid],
-        })
-        isStandardProtocol.current = false
+        device = await navigator.bluetooth.requestDevice(requestOptions)
+        isStandardProtocol.current = !!config?.serviceUuid && config.serviceUuid === WEIGHT_SCALE_SERVICE
+      } catch (err: any) {
+        throw new Error(err.message || 'Bluetooth connection cancelled or failed.')
       }
 
       deviceRef.current = device
