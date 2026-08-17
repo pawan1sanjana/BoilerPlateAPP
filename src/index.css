@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* --- Default Theme Color (Blue) CSS Variables --- */
+  :root {
+    --theme-50: 214 100% 97%;
+    --theme-100: 210 100% 93%;
+    --theme-200: 214 95% 86%;
+    --theme-300: 212 96% 78%;
+    --theme-400: 213 94% 68%;
+    --theme-500: 217 91% 60%;
+    --theme-600: 221 83% 53%;
+    --theme-700: 224 76% 48%;
+    --theme-800: 226 71% 40%;
+    --theme-900: 226 65% 34%;
+    --theme-950: 226 55% 21%;
+  }
+
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: var(--theme-600);
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: var(--theme-600);
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: var(--theme-500);
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: var(--theme-500);
+  }
+}
+
+/* --- Theme Color Overrides ---
+   These MUST be outside @layer base so they have higher cascade priority
+   and reliably override the :root defaults when the class is on <html>.
+   Applied dynamically via JS: document.documentElement.classList.add('theme-green') etc.
+*/
+.theme-green {
+  --theme-50: 138 76% 97%;
+  --theme-100: 141 84% 93%;
+  --theme-200: 141 79% 85%;
+  --theme-300: 142 77% 73%;
+  --theme-400: 141 74% 56%;
+  --theme-500: 142 71% 45%;
+  --theme-600: 142 76% 36%;
+  --theme-700: 143 74% 29%;
+  --theme-800: 143 64% 24%;
+  --theme-900: 144 61% 20%;
+  --theme-950: 144 61% 11%;
+}
+
+.theme-purple {
+  --theme-50: 270 100% 98%;
+  --theme-100: 273 100% 95%;
+  --theme-200: 275 98% 88%;
+  --theme-300: 275 98% 77%;
+  --theme-400: 275 92% 64%;
+  --theme-500: 275 80% 52%;
+  --theme-600: 274 74% 45%;
+  --theme-700: 274 65% 37%;
+  --theme-800: 273 59% 31%;
+  --theme-900: 272 51% 26%;
+  --theme-950: 272 63% 15%;
+}
+
+.theme-rose {
+  --theme-50: 355 100% 97%;
+  --theme-100: 355 100% 95%;
+  --theme-200: 355 96% 89%;
+  --theme-300: 355 94% 80%;
+  --theme-400: 355 88% 68%;
+  --theme-500: 350 89% 55%;
+  --theme-600: 345 82% 47%;
+  --theme-700: 340 82% 39%;
+  --theme-800: 338 78% 33%;
+  --theme-900: 337 72% 28%;
+  --theme-950: 336 80% 14%;
+}
+
+.theme-orange {
+  --theme-50: 33 100% 96%;
+  --theme-100: 34 100% 92%;
+  --theme-200: 33 100% 83%;
+  --theme-300: 32 98% 70%;
+  --theme-400: 29 96% 56%;
+  --theme-500: 24 94% 50%;
+  --theme-600: 18 89% 46%;
+  --theme-700: 13 83% 40%;
+  --theme-800: 11 76% 33%;
+  --theme-900: 11 73% 27%;
+  --theme-950: 12 79% 14%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* --- Custom Scrollbar --- */
+@layer utilities {
+  /* For Webkit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: theme('colors.slate.300');
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.slate.400');
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background-color: theme('colors.slate.700');
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.slate.600');
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.slate.300') transparent;
+  }
+  .dark * {
+    scrollbar-color: theme('colors.slate.700') transparent;
+  }
+}
