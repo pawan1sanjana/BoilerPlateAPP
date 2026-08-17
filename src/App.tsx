@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -8,25 +8,107 @@ import { useModulePermissionsStore } from '@/store/useModulePermissionsStore'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 import { usePWAStore } from '@/store/usePWAStore'
 import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
-import Dashboard from './pages/Dashboard'
-import Settings from './pages/settings/Settings'
-import AccountCreate from './pages/accounts/AccountCreate'
-import AccountEdit from './pages/accounts/AccountEdit'
-import AccountsList from './pages/accounts/AccountsList'
+import { Truck } from 'lucide-react'
+import { registerSession } from '@/lib/sessionManager'
+import { Toaster } from 'react-hot-toast'
+import ReloadPrompt from './components/layout/ReloadPrompt'
+import SystemUpdateBanner from './components/layout/SystemUpdateBanner'
+
+// ── Eagerly load only the shell (Layout + auth pages) ──────────────────────
 import Layout from './components/layout/Layout'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import AuthCallback from './pages/auth/AuthCallback'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import TermsOfService from './pages/TermsOfService'
-import Support from './pages/Support'
-import { Truck } from 'lucide-react'
-import { registerSession } from '@/lib/sessionManager'
-import { Toaster } from 'react-hot-toast'
-import ReloadPrompt from './components/layout/ReloadPrompt'
-import SystemUpdateBanner from './components/layout/SystemUpdateBanner'
+
+// ── Lazily load all content pages — only downloaded when first visited ──────
+const Dashboard      = lazy(() => import('./pages/Dashboard'))
+const EstatesList    = lazy(() => import('./pages/estates/EstatesList'))
+const EstateForm     = lazy(() => import('./pages/estates/EstateForm'))
+const EstateDetail   = lazy(() => import('./pages/estates/EstateDetail'))
+const FactoriesList  = lazy(() => import('./pages/factories/FactoriesList'))
+const FactoryForm    = lazy(() => import('./pages/factories/FactoryForm'))
+const Chatbot        = lazy(() => import('./pages/chatbot/Chatbot'))
+const BoundaryTracker = lazy(() => import('./pages/gis/BoundaryTracker'))
+const FieldMapPage   = lazy(() => import('./pages/gis/FieldMapPage'))
+const FieldDataPage  = lazy(() => import('./pages/gis/FieldDataPage'))
+const Settings       = lazy(() => import('./pages/settings/Settings'))
+const Calculators    = lazy(() => import('./pages/calculators/PHDolomiteCalculator'))
+const FoliarSprayCalculator = lazy(() => import('./pages/calculators/FoliarSprayCalculator'))
+const UnitsConverter = lazy(() => import('./pages/calculators/UnitsConverter'))
+const AccountCreate  = lazy(() => import('./pages/accounts/AccountCreate'))
+const AccountEdit    = lazy(() => import('./pages/accounts/AccountEdit'))
+const AccountsList   = lazy(() => import('./pages/accounts/AccountsList'))
+const PrivacyPolicy  = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const Support        = lazy(() => import('./pages/Support'))
+const WeatherPage    = lazy(() => import('./pages/weather/WeatherPage'))
+const HistoricalData = lazy(() => import('./pages/weather/HistoricalData'))
+const EPFGuidelines  = lazy(() => import('./pages/compliances/EPFGuidelines'))
+const ETFGuidelines  = lazy(() => import('./pages/compliances/ETFGuidelines'))
+const Subsidies      = lazy(() => import('./pages/compliances/SubsidyReplantingPage'))
+const Cinnamon       = lazy(() => import('./pages/compliances/CinnamonCompliance'))
+const RevenueLicenseManagement = lazy(() => import('./pages/compliances/RevenueLicenseManagement'))
+const InsuranceManagement = lazy(() => import('./pages/compliances/InsuranceManagement'))
+const WorkerRegistration = lazy(() => import('./pages/muster/WorkerRegistration'))
+const WorkerView = lazy(() => import('./pages/muster/WorkerView'))
+const WorkerArchive = lazy(() => import('./pages/muster/WorkerArchive'))
+const WorkerEnrollment = lazy(() => import('./pages/muster/WorkerEnrollment'))
+const FaceAttendance  = lazy(() => import('./pages/attendance/FaceAttendance'))
+const QRAttendance    = lazy(() => import('./pages/attendance/QRAttendance'))
+const ManualAttendance = lazy(() => import('./pages/attendance/ManualAttendance'))
+const TodaysAttendance = lazy(() => import('./pages/attendance/TodaysAttendance'))
+const DailyMuster = lazy(() => import('./pages/muster/DailyMuster'))
+const DutyRelease = lazy(() => import('./pages/muster/DutyRelease'))
+const AttendanceReportPage = lazy(() => import('./pages/reports/AttendanceReportPage'))
+const EpfEtfReportPage = lazy(() => import('./pages/reports/EpfEtfReportPage'))
+const GoodsInventoryTab = lazy(() => import('./pages/inventory/GoodsInventoryTab'))
+const AddGoodsItemTab = lazy(() => import('./pages/inventory/AddGoodsItemTab'))
+const IssueGoodsItemTab = lazy(() => import('./pages/inventory/IssueGoodsItemTab'))
+const IssueHistoryTab = lazy(() => import('./pages/inventory/IssueHistoryTab'))
+const SuppliersTab = lazy(() => import('./pages/inventory/SuppliersTab'))
+const TeaInventoryTab = lazy(() => import('./pages/inventory/TeaInventoryTab'))
+const BiologicalAssetsTab = lazy(() => import('./pages/inventory/BiologicalAssetsTab'))
+const PhysicalAssetsTab = lazy(() => import('./pages/inventory/PhysicalAssetsTab'))
+const InventoryReportsPage = lazy(() => import('./pages/reports/InventoryReportsPage'))
+const AssetAuditTab = lazy(() => import('./pages/audits/AssetAuditTab'))
+const BiologicalAssetAuditTab = lazy(() => import('./pages/audits/BiologicalAssetAuditTab'))
+const AssetAuditReportsPage = lazy(() => import('./pages/reports/AssetAuditReportsPage'))
+const PluckingIntel = lazy(() => import('./pages/crop/PluckingIntel'))
+const PruningIntel = lazy(() => import('./pages/crop/PruningIntel'))
+const WeedingIntel = lazy(() => import('./pages/crop/WeedingIntel'))
+const ManureIntel = lazy(() => import('./pages/crop/ManureIntel'))
+const LoppingIntel = lazy(() => import('./pages/crop/LoppingIntel'))
+const FoliarRound = lazy(() => import('./pages/rounds/FoliarRound'))
+const WeedingRound = lazy(() => import('./pages/rounds/WeedingRound'))
+const PluckingRound = lazy(() => import('./pages/rounds/PluckingRound'))
+const LoppingRound = lazy(() => import('./pages/rounds/LoppingRound'))
+const ManureRound = lazy(() => import('./pages/rounds/ManureRound'))
+const PruningRound = lazy(() => import('./pages/rounds/PruningRound'))
+const FoliarApplications = lazy(() => import('./pages/crop/FoliarApplications'))
+const OtherWorksIntel = lazy(() => import('./pages/crop/OtherWorksIntel'))
+const OtherCropIntel = lazy(() => import('./pages/crop/OtherCropIntel'))
+const Payrall = lazy(() => import('./pages/payrall/Payrall'))
+const MonthlyPayrall = lazy(() => import('./pages/payrall/MonthlyPayrall'))
+const CasualPayroll = lazy(() => import('./pages/payrall/CasualPayroll'))
+const CashAdvance = lazy(() => import('./pages/payrall/CashAdvance'))
+const TeaPacketIssue = lazy(() => import('./pages/payrall/TeaPacketIssue'))
+const ChartOfAccounts = lazy(() => import('./pages/finance/ChartOfAccounts'))
+const Expenses = lazy(() => import('./pages/finance/Expenses'))
+const Income = lazy(() => import('./pages/finance/Income'))
+const DailyWeeklyCOP = lazy(() => import('./pages/finance/DailyWeeklyCOP'))
+const HelpCenter = lazy(() => import('./pages/help/HelpCenter'))
+const WeighingScaleManager = lazy(() => import('./pages/weighing/WeighingScaleManager'))
+const WeighingConsole = lazy(() => import('./pages/weighing/WeighingConsole'))
+// Minimal inline fallback — avoids layout shift while lazy chunks load
+function PageSpinner() {
+  return (
+    <div className="flex h-full w-full items-center justify-center py-24">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+    </div>
+  )
+}
 
 function App() {
   const { user, setUser, fetchProfile } = useAuthStore()
@@ -137,7 +219,6 @@ function App() {
     };
   }, []);
 
-
   // Apply theme on mount and whenever it changes
   useEffect(() => {
     applyTheme(theme, themeColor)
@@ -151,22 +232,36 @@ function App() {
   }, [theme, themeColor])
 
   useEffect(() => {
-    // Fetch maintenance mode state early so it's ready before any route renders
-    fetchMaintenanceMode()
+    // ── Fire all independent startup fetches in parallel ──────────────────
+    // Previously these ran sequentially; now they race concurrently so the
+    // slowest one determines total wait time instead of the sum of all.
+    Promise.all([
+      fetchMaintenanceMode(),
+      fetchAppInfo(),
+    ])
+
     // Subscribe to real-time maintenance mode changes so all active sessions
     // immediately see the maintenance page when an admin enables it.
     subscribeToMaintenanceMode()
-    fetchModulePermissions()
-    fetchAppInfo()
+
+    const loadPermissions = () => {
+      const profile = useAuthStore.getState().profile;
+      if (profile) {
+        fetchModulePermissions(profile.estate_id || undefined, profile.role || undefined);
+      } else {
+        fetchModulePermissions(); // clear or default
+      }
+    };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser && session?.access_token) {
         registerSession(currentUser.id, session.access_token)
-        fetchProfile(currentUser.id).finally(() => setIsLoading(false));
+        fetchProfile(currentUser.id).then(loadPermissions).finally(() => setIsLoading(false));
       } else {
         useAuthStore.getState().setProfile(null);
+        loadPermissions();
         setIsLoading(false);
       }
     })
@@ -176,9 +271,10 @@ function App() {
       setUser(currentUser);
       if (currentUser && session?.access_token) {
         registerSession(currentUser.id, session.access_token)
-        fetchProfile(currentUser.id);
+        fetchProfile(currentUser.id).then(loadPermissions);
       } else {
         useAuthStore.getState().setProfile(null);
+        loadPermissions();
       }
     })
 
@@ -301,7 +397,10 @@ function App() {
     <>
       <Router>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<Navigate to="/login/estate" replace />} />
+          <Route path="/login/estate" element={<Login mode="estate" />} />
+          <Route path="/login/estate/:estateCodeParam" element={<Login mode="estate" />} />
+          <Route path="/login/admin" element={<Login mode="admin" />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -310,17 +409,257 @@ function App() {
           {/* Protected Routes inside Layout */}
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="dashboard" element={
+              <Suspense fallback={<PageSpinner />}><Dashboard /></Suspense>
+            } />
+            <Route path="estates" element={
+              <Suspense fallback={<PageSpinner />}><EstatesList /></Suspense>
+            } />
+            <Route path="estates/new" element={
+              <Suspense fallback={<PageSpinner />}><EstateForm /></Suspense>
+            } />
+            <Route path="estates/edit/:id" element={
+              <Suspense fallback={<PageSpinner />}><EstateForm /></Suspense>
+            } />
+            <Route path="estates/:id" element={
+              <Suspense fallback={<PageSpinner />}><EstateDetail /></Suspense>
+            } />
+
+            <Route path="factories" element={
+              <Suspense fallback={<PageSpinner />}><FactoriesList /></Suspense>
+            } />
+            <Route path="factories/new" element={
+              <Suspense fallback={<PageSpinner />}><FactoryForm /></Suspense>
+            } />
+            <Route path="factories/edit/:id" element={
+              <Suspense fallback={<PageSpinner />}><FactoryForm /></Suspense>
+            } />
+            <Route path="gis/boundary-tracker" element={
+              <Suspense fallback={<PageSpinner />}><BoundaryTracker /></Suspense>
+            } />
+            <Route path="gis/field-map" element={
+              <Suspense fallback={<PageSpinner />}><FieldMapPage /></Suspense>
+            } />
+            <Route path="gis/field-data" element={
+              <Suspense fallback={<PageSpinner />}><FieldDataPage /></Suspense>
+            } />
+            <Route path="chatbot" element={
+              <Suspense fallback={<PageSpinner />}><Chatbot /></Suspense>
+            } />
+            <Route path="calculators/ph-dolomite" element={
+              <Suspense fallback={<PageSpinner />}><Calculators /></Suspense>
+            } />
+            <Route path="calculators/foliar-spray" element={
+              <Suspense fallback={<PageSpinner />}><FoliarSprayCalculator /></Suspense>
+            } />
+            <Route path="calculators/units-converter" element={
+              <Suspense fallback={<PageSpinner />}><UnitsConverter /></Suspense>
+            } />
+            <Route path="settings" element={
+              <Suspense fallback={<PageSpinner />}><Settings /></Suspense>
+            } />
             
-            <Route path="accounts" element={<AccountsList />} />
-            <Route path="accounts/new" element={<AccountCreate />} />
-            <Route path="accounts/edit/:id" element={<AccountEdit />} />
+            <Route path="accounts" element={
+              <Suspense fallback={<PageSpinner />}><AccountsList /></Suspense>
+            } />
+            <Route path="accounts/new" element={
+              <Suspense fallback={<PageSpinner />}><AccountCreate /></Suspense>
+            } />
+            <Route path="accounts/edit/:id" element={
+              <Suspense fallback={<PageSpinner />}><AccountEdit /></Suspense>
+            } />
+            
+            <Route path="weather" element={
+              <Suspense fallback={<PageSpinner />}><WeatherPage /></Suspense>
+            } />
+            <Route path="weather/historical" element={
+              <Suspense fallback={<PageSpinner />}><HistoricalData /></Suspense>
+            } />
+            <Route path="compliances/epf" element={
+              <Suspense fallback={<PageSpinner />}><EPFGuidelines /></Suspense>
+            } />
+            <Route path="compliances/etf" element={
+              <Suspense fallback={<PageSpinner />}><ETFGuidelines /></Suspense>
+            } />
+            <Route path="compliances/subsidies" element={
+              <Suspense fallback={<PageSpinner />}><Subsidies /></Suspense>
+            } />
+            <Route path="compliances/cinnamon" element={
+              <Suspense fallback={<PageSpinner />}><Cinnamon /></Suspense>
+            } />
+            <Route path="compliances/revenue-license" element={
+              <Suspense fallback={<PageSpinner />}><RevenueLicenseManagement /></Suspense>
+            } />
+            <Route path="compliances/insurance" element={
+              <Suspense fallback={<PageSpinner />}><InsuranceManagement /></Suspense>
+            } />
+            <Route path="muster/workers" element={
+              <Suspense fallback={<PageSpinner />}><WorkerRegistration /></Suspense>
+            } />
+            <Route path="muster/directory" element={
+              <Suspense fallback={<PageSpinner />}><WorkerView /></Suspense>
+            } />
+            <Route path="muster/archive" element={
+              <Suspense fallback={<PageSpinner />}><WorkerArchive /></Suspense>
+            } />
+            <Route path="muster/enrollment" element={
+              <Suspense fallback={<PageSpinner />}><WorkerEnrollment /></Suspense>
+            } />
+            <Route path="muster/daily" element={
+              <Suspense fallback={<PageSpinner />}><DailyMuster /></Suspense>
+            } />
+            <Route path="muster/release" element={
+              <Suspense fallback={<PageSpinner />}><DutyRelease /></Suspense>
+            } />
+            <Route path="attendance/face-attendance" element={
+              <Suspense fallback={<PageSpinner />}><FaceAttendance /></Suspense>
+            } />
+            <Route path="attendance/qr-attendance" element={
+              <Suspense fallback={<PageSpinner />}><QRAttendance /></Suspense>
+            } />
+            <Route path="attendance/manual-attendance" element={
+              <Suspense fallback={<PageSpinner />}><ManualAttendance /></Suspense>
+            } />
+            <Route path="attendance/todays-attendance" element={
+              <Suspense fallback={<PageSpinner />}><TodaysAttendance /></Suspense>
+            } />
+
+            <Route path="reports/attendance" element={
+              <Suspense fallback={<PageSpinner />}><AttendanceReportPage /></Suspense>
+            } />
+
+            <Route path="reports/epf-etf" element={
+              <Suspense fallback={<PageSpinner />}><EpfEtfReportPage /></Suspense>
+            } />
+
+            <Route path="inventory/goods" element={
+              <Suspense fallback={<PageSpinner />}><GoodsInventoryTab /></Suspense>
+            } />
+            <Route path="inventory/goods/new" element={
+              <Suspense fallback={<PageSpinner />}><AddGoodsItemTab /></Suspense>
+            } />
+            <Route path="inventory/goods/issue" element={
+              <Suspense fallback={<PageSpinner />}><IssueGoodsItemTab /></Suspense>
+            } />
+            <Route path="inventory/goods/history" element={
+              <Suspense fallback={<PageSpinner />}><IssueHistoryTab /></Suspense>
+            } />
+            <Route path="inventory/tea-packets" element={
+              <Suspense fallback={<PageSpinner />}><TeaInventoryTab /></Suspense>
+            } />
+            <Route path="inventory/suppliers" element={
+              <Suspense fallback={<PageSpinner />}><SuppliersTab /></Suspense>
+            } />
+            <Route path="inventory/biological" element={
+              <Suspense fallback={<PageSpinner />}><BiologicalAssetsTab /></Suspense>
+            } />
+            <Route path="inventory/physical" element={
+              <Suspense fallback={<PageSpinner />}><PhysicalAssetsTab /></Suspense>
+            } />
+            <Route path="/reports/inventory" element={
+              <Suspense fallback={<PageSpinner />}><InventoryReportsPage /></Suspense>
+            } />
+            <Route path="/reports/audits" element={
+              <Suspense fallback={<PageSpinner />}><AssetAuditReportsPage /></Suspense>
+            } />
+            <Route path="inventory" element={<Navigate to="/inventory/goods" replace />} />
+            <Route path="audits/physical" element={
+              <Suspense fallback={<PageSpinner />}><AssetAuditTab /></Suspense>
+            } />
+            <Route path="audits/biological" element={
+              <Suspense fallback={<PageSpinner />}><BiologicalAssetAuditTab /></Suspense>
+            } />
+            <Route path="crop/plucking" element={
+              <Suspense fallback={<PageSpinner />}><PluckingIntel /></Suspense>
+            } />
+            <Route path="crop/pruning" element={
+              <Suspense fallback={<PageSpinner />}><PruningIntel /></Suspense>
+            } />
+            <Route path="crop/weeding" element={
+              <Suspense fallback={<PageSpinner />}><WeedingIntel /></Suspense>
+            } />
+            <Route path="crop/manure" element={
+              <Suspense fallback={<PageSpinner />}><ManureIntel /></Suspense>
+            } />
+            <Route path="crop/lopping" element={
+              <Suspense fallback={<PageSpinner />}><LoppingIntel /></Suspense>
+            } />
+            <Route path="crop/foliar-applications" element={
+              <Suspense fallback={<PageSpinner />}><FoliarApplications /></Suspense>
+            } />
+            <Route path="rounds/foliar" element={
+              <Suspense fallback={<PageSpinner />}><FoliarRound /></Suspense>
+            } />
+            <Route path="rounds/weeding" element={
+              <Suspense fallback={<PageSpinner />}><WeedingRound /></Suspense>
+            } />
+            <Route path="rounds/plucking" element={
+              <Suspense fallback={<PageSpinner />}><PluckingRound /></Suspense>
+            } />
+            <Route path="rounds/lopping" element={
+              <Suspense fallback={<PageSpinner />}><LoppingRound /></Suspense>
+            } />
+            <Route path="rounds/manure" element={
+              <Suspense fallback={<PageSpinner />}><ManureRound /></Suspense>
+            } />
+            <Route path="rounds/pruning" element={
+              <Suspense fallback={<PageSpinner />}><PruningRound /></Suspense>
+            } />
+            <Route path="crop/other-works" element={
+              <Suspense fallback={<PageSpinner />}><OtherWorksIntel /></Suspense>
+            } />
+            <Route path="other-crop" element={
+              <Suspense fallback={<PageSpinner />}><OtherCropIntel /></Suspense>
+            } />
+            <Route path="payrall/daily" element={
+              <Suspense fallback={<PageSpinner />}><Payrall /></Suspense>
+            } />
+            <Route path="payrall/monthly" element={
+              <Suspense fallback={<PageSpinner />}><MonthlyPayrall /></Suspense>
+            } />
+            <Route path="payrall/casual" element={
+              <Suspense fallback={<PageSpinner />}><CasualPayroll /></Suspense>
+            } />
+            <Route path="payrall/cash-advance" element={
+              <Suspense fallback={<PageSpinner />}><CashAdvance /></Suspense>
+            } />
+            <Route path="payrall/tea-packet-issue" element={
+              <Suspense fallback={<PageSpinner />}><TeaPacketIssue /></Suspense>
+            } />
+            <Route path="finance/chart-of-accounts" element={
+              <Suspense fallback={<PageSpinner />}><ChartOfAccounts /></Suspense>
+            } />
+            <Route path="finance/expenses" element={
+              <Suspense fallback={<PageSpinner />}><Expenses /></Suspense>
+            } />
+            <Route path="finance/income" element={
+              <Suspense fallback={<PageSpinner />}><Income /></Suspense>
+            } />
+            <Route path="finance/cop" element={
+              <Suspense fallback={<PageSpinner />}><DailyWeeklyCOP /></Suspense>
+            } />
+            <Route path="finance" element={<Navigate to="/finance/chart-of-accounts" replace />} />
 
             {/* Public/Informational Routes inside Layout */}
-            <Route path="privacy" element={<PrivacyPolicy />} />
-            <Route path="terms" element={<TermsOfService />} />
-            <Route path="support" element={<Support />} />
+            <Route path="privacy" element={
+              <Suspense fallback={<PageSpinner />}><PrivacyPolicy /></Suspense>
+            } />
+            <Route path="terms" element={
+              <Suspense fallback={<PageSpinner />}><TermsOfService /></Suspense>
+            } />
+            <Route path="support" element={
+              <Suspense fallback={<PageSpinner />}><Support /></Suspense>
+            } />
+            <Route path="help" element={
+              <Suspense fallback={<PageSpinner />}><HelpCenter /></Suspense>
+            } />
+            <Route path="weighing/scales" element={
+              <Suspense fallback={<PageSpinner />}><WeighingScaleManager /></Suspense>
+            } />
+            <Route path="weighing/console" element={
+              <Suspense fallback={<PageSpinner />}><WeighingConsole /></Suspense>
+            } />
+            <Route path="weighing" element={<Navigate to="/weighing/scales" replace />} />
           </Route>
         </Routes>
       </Router>

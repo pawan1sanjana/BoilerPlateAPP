@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LogOut, User, Sun, Moon, Menu } from 'lucide-react'
+import { LogOut, User, Sun, Moon, Menu, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useThemeStore } from '@/store/useThemeStore'
@@ -22,7 +22,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const { user, signOut } = useAuthStore()
+  const { user, profile, signOut } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
   const { appName } = useAppInfoStore()
   const location = useLocation()
@@ -76,34 +76,36 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <PWAInstallPrompt />
 
         {/* ── Animated Theme Toggle ── */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="relative w-9 h-9 rounded-full overflow-hidden text-slate-500 hover:text-amber-500 dark:text-slate-400 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors duration-200"
-        >
-          {/* Sun icon */}
-          <span
-            className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-spring
-              ${theme === 'dark'
-                ? 'opacity-100 rotate-0 scale-100'
-                : 'opacity-0 rotate-90 scale-50'
-              }`}
+        {profile?.role === 'admin' && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="relative w-9 h-9 rounded-full overflow-hidden text-slate-500 hover:text-amber-500 dark:text-slate-400 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors duration-200"
           >
-            <Sun className="h-5 w-5" />
-          </span>
-          {/* Moon icon */}
-          <span
-            className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-spring
-              ${theme === 'light'
-                ? 'opacity-100 rotate-0 scale-100'
-                : 'opacity-0 -rotate-90 scale-50'
-              }`}
-          >
-            <Moon className="h-5 w-5" />
-          </span>
-        </Button>
+            {/* Sun icon */}
+            <span
+              className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-spring
+                ${theme === 'dark'
+                  ? 'opacity-100 rotate-0 scale-100'
+                  : 'opacity-0 rotate-90 scale-50'
+                }`}
+            >
+              <Sun className="h-5 w-5" />
+            </span>
+            {/* Moon icon */}
+            <span
+              className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-spring
+                ${theme === 'light'
+                  ? 'opacity-100 rotate-0 scale-100'
+                  : 'opacity-0 -rotate-90 scale-50'
+                }`}
+            >
+              <Moon className="h-5 w-5" />
+            </span>
+          </Button>
+        )}
 
         {/* Notification Bell */}
         <NotificationBell />
@@ -137,6 +139,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <DropdownMenuSeparator />
             <Link to="/settings" className="w-full">
               <DropdownMenuItem className="cursor-pointer">Profile settings</DropdownMenuItem>
+            </Link>
+            <Link to="/help" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <HelpCircle className="mr-2 h-4 w-4" />
+                <span>Help Center</span>
+              </DropdownMenuItem>
             </Link>
             <DropdownMenuItem
               onClick={handleSignOut}

@@ -13,6 +13,7 @@ CREATE TABLE public.users (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   role TEXT NOT NULL DEFAULT 'user',
   name TEXT NOT NULL,
+  username TEXT UNIQUE,
   email TEXT UNIQUE NOT NULL,
   phone TEXT,
   status TEXT DEFAULT 'active',
@@ -31,16 +32,13 @@ CREATE POLICY "Admins can view all users" ON public.users
   );
 
 -- Create a helper function to check if the current user is an admin.
--- We use SECURITY DEFINER to bypass RLS and avoid infinite recursion.
+-- Using JWT claims avoids querying the users table and prevents infinite recursion.
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid() AND role = 'admin'
-  );
+  RETURN (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE plpgsql STABLE;
 
 -- Create system_settings table
 CREATE TABLE IF NOT EXISTS public.system_settings (
@@ -191,10 +189,12 @@ INSERT INTO auth.users (
   confirmation_token,
   email_change,
   email_change_token_new,
-  recovery_token
+  recovery_token,
+  is_sso_user,
+  is_super_admin
 ) VALUES (
   '00000000-0000-0000-0000-000000000000',
-  '00000000-0000-0000-0000-000000000000',
+  '11111111-1111-1111-1111-111111111111',
   'authenticated',
   'authenticated',
   'admin@boilerplate.com',
@@ -209,7 +209,9 @@ INSERT INTO auth.users (
   '',
   '',
   '',
-  ''
+  '',
+  false,
+  false
 ) ON CONFLICT (id) DO NOTHING;
 
 -- 2. Insert into auth.identities
@@ -224,10 +226,10 @@ INSERT INTO auth.identities (
   updated_at
 ) VALUES (
   gen_random_uuid(),
-  '00000000-0000-0000-0000-000000000000',
-  format('{"sub":"%s","email":"%s"}', '00000000-0000-0000-0000-000000000000', 'admin@boilerplate.com')::jsonb,
+  '11111111-1111-1111-1111-111111111111',
+  format('{"sub":"%s","email":"%s"}', '11111111-1111-1111-1111-111111111111', 'admin@boilerplate.com')::jsonb,
   'email',
-  'admin@boilerplate.com',
+  '11111111-1111-1111-1111-111111111111',
   now(),
   now(),
   now()
@@ -339,16 +341,13 @@ DROP POLICY IF EXISTS "Admins can update all profiles" ON public.users;
 DROP POLICY IF EXISTS "Admins can delete profiles"    ON public.users;
 
 -- Create a helper function to check if the current user is an admin.
--- We use SECURITY DEFINER to bypass RLS and avoid infinite recursion.
+-- Using JWT claims avoids querying the users table and prevents infinite recursion.
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid() AND role = 'admin'
-  );
+  RETURN (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE plpgsql STABLE;
 
 -- Allow a logged-in user to read their OWN profile row
 CREATE POLICY "Users can read own profile"

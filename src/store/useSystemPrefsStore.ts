@@ -7,13 +7,15 @@ export interface SystemPrefs {
   dateFormat: string // 'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'
   numberFormat: string // '1,234.56' or '1.234,56'
   language: string
+  showScrollToTop: boolean
 }
 
 const DEFAULT_PREFS: SystemPrefs = {
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   dateFormat: 'DD/MM/YYYY',
   numberFormat: '1,234.56',
-  language: 'english'
+  language: 'english',
+  showScrollToTop: true
 }
 
 interface SystemPrefsState {

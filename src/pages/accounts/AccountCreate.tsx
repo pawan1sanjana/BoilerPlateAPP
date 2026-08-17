@@ -3,10 +3,16 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Shield, Mail, Lock, User, Camera, RefreshCw, Phone } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import toast from 'react-hot-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { isAdmin, getRoleOptions } from '@/lib/roleUtils';
+import type { AppRole } from '@/store/useModulePermissionsStore';
 
 export default function AccountCreate() {
+  const currentProfile = useAuthStore(s => s.profile);
+  const currentRole = currentProfile?.role as AppRole | null;
+  const roleOptions = getRoleOptions(currentRole);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,6 +24,33 @@ export default function AccountCreate() {
     role: 'user',
     profile_photo: ''
   });
+
+  // Only admin can access this page
+  if (!isAdmin(currentRole)) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center space-y-4">
+        <Shield className="w-12 h-12 text-slate-400 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Access Restricted</h2>
+        <p className="text-slate-500 dark:text-slate-400">
+          Only system administrators can register global users.<br />
+          To add a user to your estate, use the <strong>Invite User</strong> button on your estate's management page.
+        </p>
+        {currentProfile?.estate_id && (
+          <Link
+            to={`/estates/${currentProfile.estate_id}`}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            Go to My Estate
+          </Link>
+        )}
+        <div>
+          <Link to="/accounts" className="text-sm text-slate-500 hover:text-blue-500 transition-colors">
+            ← Back to Accounts
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -91,6 +124,7 @@ export default function AccountCreate() {
 
     try {
       // Create user using Supabase edge function to bypass email confirmation
+      const currentUserProfile = useAuthStore.getState().profile;
       const { data, error: functionError } = await supabase.functions.invoke('create-user', {
         body: {
           email: formData.email,
@@ -99,7 +133,8 @@ export default function AccountCreate() {
             name: formData.name,
             role: formData.role,
             phone: formData.phone,
-            status: 'active'
+            status: 'active',
+            estate_id: currentUserProfile?.estate_id || null
           }
         }
       });
@@ -130,7 +165,7 @@ export default function AccountCreate() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/dashboard" className="p-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+        <Link to="/accounts" className="p-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <div>
@@ -254,8 +289,9 @@ export default function AccountCreate() {
                       onChange={handleChange}
                       className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white transition-all shadow-sm appearance-none"
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
+                      {roleOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

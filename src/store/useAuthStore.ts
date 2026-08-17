@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase'
 
 export interface UserProfile {
   id: string;
-  role: 'admin' | 'user' | null;
+  role: 'admin' | 'estate_manager' | 'estate_office' | 'field_officer' | 'user' | null;
+  estate_id: string | null;
   name: string;
   email: string;
   phone: string | null;

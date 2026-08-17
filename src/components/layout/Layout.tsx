@@ -10,7 +10,7 @@ import MaintenancePage from '@/pages/MaintenancePage'
 import UnauthorizedModal from '@/components/ui/UnauthorizedModal'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 import { Truck } from 'lucide-react'
-
+import ScrollToTopButton from './ScrollToTopButton'
 // ─── Module Guard ─────────────────────────────────────────────────────────────
 
 function ModuleGuard({ userRole, children }: { userRole: AppRole | null; children: React.ReactNode }) {
@@ -77,7 +77,7 @@ export default function Layout() {
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto flex flex-col">
+        <main id="main-scroll-container" className="flex-1 overflow-y-auto flex flex-col">
           <div className="p-4 md:p-6 flex-1">
             <div className="mx-auto max-w-7xl">
               <ModuleGuard userRole={(profile?.role as AppRole) ?? null}>
@@ -87,6 +87,7 @@ export default function Layout() {
           </div>
           <Footer />
         </main>
+        <ScrollToTopButton />
       </div>
     </div>
   )

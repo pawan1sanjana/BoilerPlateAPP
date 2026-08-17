@@ -1,22 +1,106 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Settings as SettingsIcon, X, UserCog, ChevronDown, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { LayoutDashboard, Settings as SettingsIcon, X, UserCog, ChevronDown, Truck, Calculator, Droplets, Ruler, Bot, Building2, MapPin, Cloud, History, ShieldCheck, Users, UserPlus, Sprout, ClipboardList, ClipboardCheck, Archive, ScanFace, Fingerprint, QrCode, FileText, LogOut, Package, RefreshCcw, PlusCircle, TreeDeciduous, Box, Scan, Leaf, Coffee, CalendarClock, Scissors, Shovel, Axe, Briefcase, Activity, Banknote, Landmark, ReceiptText, Scale, Bluetooth } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useModulePermissionsStore, type AppRole } from '@/store/useModulePermissionsStore'
+import { useModuleOrderStore } from '@/store/useModuleOrderStore'
+import { useEffect } from 'react'
 import { useAppInfoStore } from '@/store/useAppInfoStore'
 
-const navItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  {
-    name: 'Administration',
-    icon: SettingsIcon,
-    subItems: [
-      { name: 'Accounts', path: '/accounts', icon: UserCog },
-      { name: 'System Settings', path: '/settings', icon: SettingsIcon },
-    ]
-  }
-]
+const STATIC_MAIN_REGISTRY: Record<string, any> = {
+  'estates_management': { name: 'Estates & Factories', icon: Truck },
+  'other_crop': { name: 'Other Crops', icon: Sprout },
+  'muster': { name: 'HR', icon: Users },
+  'smart_muster': { name: 'Muster', icon: ClipboardCheck },
+  'attendance': { name: 'Attendance', icon: Fingerprint },
+  'gis': { name: 'GIS', icon: MapPin },
+  'dashboard': { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  'inventory': { name: 'Inventory', path: '/inventory', icon: Package },
+  'audits': { name: 'Audits', icon: ClipboardCheck },
+  'weather': { name: 'Weather', icon: Cloud },
+  'chatbot': { name: 'AI Assistant', path: '/chatbot', icon: Bot },
+  'calculators': { name: 'Calculators', icon: Calculator },
+  'reports': { name: 'Reports', icon: FileText },
+  'administration': { name: 'Administration', icon: SettingsIcon },
+  'compliances': { name: 'Compliances', icon: ShieldCheck },
+  'crop': { name: 'Daily Operations', icon: Leaf },
+  'rounds_monitor': { name: 'Rounds Monitor', icon: Activity },
+  'payrall': { name: 'Payroll', icon: Banknote },
+  'finance': { name: 'Finance', icon: Landmark },
+  'weighing': { name: 'Weighing Scale', icon: Scale },
+}
+
+const STATIC_SUB_REGISTRY: Record<string, any> = {
+
+  'estates_management/estates': { name: 'Estates', path: '/estates', icon: Truck },
+  'muster/workers': { name: 'Worker Registration', path: '/muster/workers', icon: UserPlus },
+  'muster/directory': { name: 'Worker Directory', path: '/muster/directory', icon: ClipboardList },
+  'smart_muster/daily': { name: 'Daily Muster', path: '/muster/daily', icon: ClipboardCheck },
+  'smart_muster/release': { name: 'Duty Release', path: '/muster/release', icon: LogOut },
+  'muster/enrollment': { name: 'Face Enrollment', path: '/muster/enrollment', icon: ScanFace },
+  'attendance/todays-attendance': { name: 'Todays Attendance', path: '/attendance/todays-attendance', icon: CalendarClock },
+  'attendance/face-attendance': { name: 'Face Attendance', path: '/attendance/face-attendance', icon: Fingerprint },
+  'attendance/qr-attendance': { name: 'QR Attendance', path: '/attendance/qr-attendance', icon: QrCode },
+  'attendance/manual-attendance': { name: 'Manual Attendance', path: '/attendance/manual-attendance', icon: ClipboardList },
+  'muster/archive': { name: 'Archived Workers', path: '/muster/archive', icon: Archive },
+  'estates_management/factories': { name: 'Factories', path: '/factories', icon: Building2 },
+  'gis/boundary-tracker': { name: 'Boundary Tracker', path: '/gis/boundary-tracker', icon: MapPin },
+  'gis/field-map': { name: 'Field Map', path: '/gis/field-map', icon: MapPin },
+  'gis/field-data': { name: 'Field Data', path: '/gis/field-data', icon: MapPin },
+  'calculators/ph': { name: 'PH Dolomite', path: '/calculators/ph-dolomite', icon: Calculator },
+  'calculators/foliar': { name: 'Foliar Spray', path: '/calculators/foliar-spray', icon: Droplets },
+  'calculators/units': { name: 'Units Converter', path: '/calculators/units-converter', icon: Ruler },
+  'weather/realtime': { name: 'Realtime Weather', path: '/weather', icon: Cloud, exact: true },
+  'weather/historical': { name: 'Historical Data', path: '/weather/historical', icon: History },
+  'admin/accounts': { name: 'Accounts', path: '/accounts', icon: UserCog },
+  'admin/settings': { name: 'System Settings', path: '/settings', icon: SettingsIcon },
+  'compliances/epf': { name: 'EPF Guidelines', path: '/compliances/epf', icon: Building2 },
+  'compliances/etf': { name: 'ETF Guidelines', path: '/compliances/etf', icon: Users },
+  'compliances/subsidies': { name: 'Tea Subsidies', path: '/compliances/subsidies', icon: Sprout },
+  'compliances/cinnamon': { name: 'Other Crops', path: '/compliances/cinnamon', icon: ClipboardList },
+  'compliances/revenue-license': { name: 'Revenue License', path: '/compliances/revenue-license', icon: ClipboardList },
+  'compliances/insurance': { name: 'Insurance', path: '/compliances/insurance', icon: ShieldCheck },
+  'reports/attendance': { name: 'Attendance Reports', path: '/reports/attendance', icon: FileText },
+  'inventory/goods': { name: 'Goods Inventory', path: '/inventory/goods', icon: Package, exact: true },
+  'inventory/add_goods': { name: 'Register Item', path: '/inventory/goods/new', icon: PlusCircle },
+  'inventory/issue_goods': { name: 'Issue Items', path: '/inventory/goods/issue', icon: RefreshCcw },
+  'inventory/issue_history': { name: 'Issue History', path: '/inventory/goods/history', icon: History },
+  'inventory/tea_packets': { name: 'Tea Packets', path: '/inventory/tea-packets', icon: Coffee },
+  'inventory/suppliers': { name: 'Supplier Directory', path: '/inventory/suppliers', icon: Users },
+  'inventory/biological': { name: 'Biological Assets', path: '/inventory/biological', icon: TreeDeciduous },
+  'inventory/physical': { name: 'Physical Assets', path: '/inventory/physical', icon: Box },
+  'reports/inventory': { name: 'Inventory Reports', path: '/reports/inventory', icon: FileText },
+  'reports/audits': { name: 'Assets Audit Reports', path: '/reports/audits', icon: FileText },
+  'reports/epf-etf': { name: 'EPF / ETF Report', path: '/reports/epf-etf', icon: ShieldCheck },
+  'audits/physical': { name: 'Asset Audit Scanner', path: '/audits/physical', icon: Scan },
+  'audits/biological': { name: 'Bio Asset Audit', path: '/audits/biological', icon: Leaf },
+  'crop/plucking': { name: 'Plucking Registry', path: '/crop/plucking', icon: Sprout },
+  'crop/pruning': { name: 'Pruning Registry', path: '/crop/pruning', icon: Scissors },
+  'crop/weeding': { name: 'Weeding Registry', path: '/crop/weeding', icon: Shovel },
+  'crop/manure': { name: 'Manure Registry', path: '/crop/manure', icon: Package },
+  'crop/lopping': { name: 'Lopping Registry', path: '/crop/lopping', icon: Axe },
+  'crop/foliar-applications': { name: 'Foliar Applications', path: '/crop/foliar-applications', icon: Droplets },
+  'rounds/foliar': { name: 'Foliar Monitor', path: '/rounds/foliar', icon: Droplets },
+  'rounds/weeding': { name: 'Weeding Monitor', path: '/rounds/weeding', icon: Shovel },
+  'rounds/plucking': { name: 'Plucking Monitor', path: '/rounds/plucking', icon: Sprout },
+  'rounds/manure': { name: 'Manure Monitor', path: '/rounds/manure', icon: Package },
+  'rounds/pruning': { name: 'Pruning Monitor', path: '/rounds/pruning', icon: Scissors },
+  'rounds/lopping': { name: 'Lopping Monitor', path: '/rounds/lopping', icon: Axe },
+  'crop/other-works': { name: 'Other Works', path: '/crop/other-works', icon: Briefcase },
+  'other_crop/intel': { name: 'Other Crop Intel', path: '/other-crop', icon: Sprout },
+  'payrall/daily': { name: 'Daily Payroll', path: '/payrall/daily', icon: ClipboardCheck },
+  'payrall/monthly': { name: 'Monthly Payroll', path: '/payrall/monthly', icon: ClipboardList },
+  'payrall/casual': { name: 'Casual Payroll', path: '/payrall/casual', icon: Users },
+  'payrall/cash-advance': { name: 'Cash Advance', path: '/payrall/cash-advance', icon: Banknote },
+  'payrall/tea-packet-issue': { name: 'Tea Packet Issue', path: '/payrall/tea-packet-issue', icon: Package },
+  'finance/chart-of-accounts': { name: 'Chart of Accounts', path: '/finance/chart-of-accounts', icon: Landmark },
+  'finance/expenses': { name: 'Expenses', path: '/finance/expenses', icon: ReceiptText },
+  'finance/income': { name: 'Income', path: '/finance/income', icon: Banknote },
+  'finance/cop': { name: 'Daily & Weekly COP', path: '/finance/cop', icon: Calculator },
+  'weighing/scales': { name: 'Scale Management', path: '/weighing/scales', icon: Scale },
+  'weighing/console': { name: 'Weighing Console', path: '/weighing/console', icon: Bluetooth },
+}
 
 interface SidebarProps {
   isOpen?: boolean
@@ -30,11 +114,29 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { profile } = useAuthStore()
   const { appName, appIcon, appVersion, companyName } = useAppInfoStore()
   const { checkAccess } = useModulePermissionsStore()
+  const { mainOrder, subOrders, fetch: fetchModuleOrder } = useModuleOrderStore()
   const userRole = (profile?.role as AppRole) ?? null
+
+  useEffect(() => {
+    fetchModuleOrder()
+  }, [fetchModuleOrder])
+
+  const navItems = mainOrder.map(mainKey => {
+    const mainDef = STATIC_MAIN_REGISTRY[mainKey]
+    if (!mainDef) return null
+
+    const subs = subOrders[mainKey]
+    if (subs && subs.length > 0) {
+      const subItems = subs.map(subKey => STATIC_SUB_REGISTRY[subKey]).filter(Boolean)
+      return { ...mainDef, subItems }
+    }
+
+    return mainDef
+  }).filter(Boolean)
 
   const filteredNavItems = navItems.map(item => {
     if (item.subItems) {
-      const filteredSubItems = item.subItems.filter(sub => {
+      const filteredSubItems = item.subItems.filter((sub: any) => {
         return checkAccess(userRole, sub.path).allowed
       })
       return { ...item, subItems: filteredSubItems }
@@ -57,7 +159,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     setOpenDropdowns(prev => {
       const isCurrentlyOpen = prev[name] !== undefined
         ? prev[name]
-        : filteredNavItems.find(i => i.name === name)?.subItems?.some(sub => {
+        : filteredNavItems.find(i => i.name === name)?.subItems?.some((sub: any) => {
           if ((sub as any).exact) {
             return location.pathname === sub.path
           }
@@ -155,7 +257,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
                     {isOpen && (
                       <div className="pl-10 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                        {item.subItems.map((subItem) => (
+                        {item.subItems.map((subItem: any) => (
                           <NavLink
                              key={subItem.name}
                             to={subItem.path}
@@ -185,6 +287,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   key={item.name}
                   to={item.path!}
                   onClick={onClose}
+                  end
                   className={({ isActive }) =>
                     cn(
                       'group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors',

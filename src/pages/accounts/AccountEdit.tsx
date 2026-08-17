@@ -3,15 +3,24 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Edit, Shield, Mail, Lock, User, Camera, RefreshCw, Phone, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import toast from 'react-hot-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { isAdmin, canManageUsers, canAccessEstate, getRoleOptions } from '@/lib/roleUtils';
+import type { AppRole } from '@/store/useModulePermissionsStore';
 
 export default function AccountEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const currentProfile = useAuthStore(s => s.profile);
+  const currentRole = currentProfile?.role as AppRole | null;
+  const canManage = canManageUsers(currentRole);
+  const roleOptions = getRoleOptions(currentRole);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [scopeBlocked, setScopeBlocked] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -91,13 +100,26 @@ export default function AccountEdit() {
         if (fetchError) throw fetchError;
 
         if (data) {
+          // Scope check: non-admin users can only edit users in their own estate
+          if (!isAdmin(currentRole) && !canAccessEstate(currentRole, currentProfile?.estate_id, data.estate_id)) {
+            setScopeBlocked(true);
+            setLoading(false);
+            return;
+          }
+          // Non-managers cannot edit at all
+          if (!canManage) {
+            setScopeBlocked(true);
+            setLoading(false);
+            return;
+          }
+
           setFormData({
             name: data.name || '',
             email: data.email || '',
             phone: data.phone || '',
             role: data.role || 'user',
             password: '',
-            profile_photo: '', // If you add an avatar_url column, use it here
+            profile_photo: '',
             status: data.status || 'active'
           });
         }
@@ -108,7 +130,7 @@ export default function AccountEdit() {
       }
     };
     fetchUser();
-  }, [id]);
+  }, [id, currentRole, currentProfile?.estate_id, canManage]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -148,6 +170,20 @@ export default function AccountEdit() {
 
       if (updateError) throw updateError;
 
+      if (formData.password) {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('update-user-password', {
+          body: {
+            userId: id,
+            password: formData.password
+          }
+        });
+
+        if (fnError || fnData?.error) {
+          const msg = fnData?.error || fnError?.message || 'Failed to update password';
+          throw new Error(msg);
+        }
+      }
+
       toast.success('User updated successfully');
       navigate('/accounts'); // Or navigate to /dashboard
     } catch (err: any) {
@@ -162,6 +198,21 @@ export default function AccountEdit() {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-slate-500">Loading user profile...</div>
+      </div>
+    );
+  }
+
+  if (scopeBlocked) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center space-y-4">
+        <Shield className="w-12 h-12 text-slate-400 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Access Restricted</h2>
+        <p className="text-slate-500 dark:text-slate-400">
+          You don't have permission to edit this user account.
+        </p>
+        <Link to="/accounts" className="text-sm text-blue-500 hover:underline">
+          ← Back to Accounts
+        </Link>
       </div>
     );
   }
@@ -303,21 +354,22 @@ export default function AccountEdit() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Role</label>
-                  <div className="relative">
-                    <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <select
-                      name="role"
-                      value={formData.role}
-                      onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white transition-all shadow-sm appearance-none"
-                    >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Role</label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <select
+                        name="role"
+                        value={formData.role}
+                        onChange={handleChange}
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white transition-all shadow-sm appearance-none"
+                      >
+                        {roleOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Update Password <span className="text-xs font-normal text-slate-500">(Leave blank)</span></label>
@@ -327,11 +379,10 @@ export default function AccountEdit() {
                       type="password"
                       name="password"
                       minLength={6}
-                      disabled
                       value={formData.password}
                       onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none text-slate-500 dark:text-slate-400 transition-all shadow-sm cursor-not-allowed"
-                      placeholder="Requires Admin API to change"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white transition-all shadow-sm"
+                      placeholder="Enter new password"
                     />
                   </div>
                 </div>

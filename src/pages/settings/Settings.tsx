@@ -6,7 +6,7 @@ import {
   Settings as SettingsIcon, Wrench, Lock, Loader2,
   Sun, Moon, Smartphone, Check, DollarSign, CheckCircle2,
   Image as ImageIcon, Type, QrCode, Download, Share2,
-  ShieldCheck, Globe2, ClipboardList, Database, Info, Fingerprint, HelpCircle, FileText, RefreshCw
+  ShieldCheck, Globe2, ClipboardList, Database, Info, Fingerprint, HelpCircle, FileText, RefreshCw, Bot
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
@@ -18,10 +18,14 @@ import SystemPrefsTab from './tabs/SystemPrefsTab'
 import AuditLogTab from './tabs/AuditLogTab'
 import BackupTab from './tabs/BackupTab'
 import SystemInfoTab from './tabs/SystemInfoTab'
+import ModuleOrderTab from './tabs/ModuleOrderTab'
+import AiSettingsTab from './tabs/AiSettingsTab'
 import { TablePagination } from '@/components/TablePagination'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useThemeStore } from '@/store/useThemeStore'
+import { useModulePermissionsStore, type AppRole, type ModuleKey, type PermissionMatrix } from '@/store/useModulePermissionsStore'
+import { useModuleOrderStore } from '@/store/useModuleOrderStore'
 import { useCurrencyStore, type Currency } from '@/store/useCurrencyStore'
 import { useUnitsStore, type DistanceUnit, type VolumeUnit, type WeightUnit } from '@/store/useUnitsStore'
 import { subscribeToPushNotifications, unsubscribeFromPushNotifications, getPushSubscriptionStatus } from '@/lib/pushNotifications'
@@ -32,15 +36,12 @@ import { usePWAStore } from '@/store/usePWAStore'
 import { useSocialLoginStore } from '@/store/useSocialLoginStore'
 import { useBiometricStore } from '@/store/useBiometricStore'
 import {
-  useModulePermissionsStore,
   ALL_MODULES,
   ALL_ROLES,
   SUB_MODULES,
-  type PermissionMatrix,
-  type AppRole,
-  type ModuleKey,
 } from '@/store/useModulePermissionsStore'
 import { useSecurityPolicyStore } from '@/store/useSecurityPolicyStore'
+import { useSystemPrefsStore } from '@/store/useSystemPrefsStore'
 
 interface SectionHelpGuideProps {
   title: string
@@ -90,15 +91,374 @@ function SectionHelpGuide({ title, steps, tips }: SectionHelpGuideProps) {
   )
 }
 
+// ── Social Login Provider Panel (sub-component so it can own modal state) ──
+interface SocialLoginPanelProps {
+  socialLoginEnabled: boolean
+  providers: Record<'google' | 'facebook' | 'github', boolean>
+  isSocialLoginSaving: boolean
+  savingProvider: 'google' | 'facebook' | 'github' | null
+  setSocialLoginEnabled: (v: boolean) => Promise<boolean>
+  setProviderEnabled: (p: 'google' | 'facebook' | 'github', v: boolean) => Promise<boolean>
+  setIsSocialLoginSaving: (v: boolean) => void
+  setSavingProvider: (p: 'google' | 'facebook' | 'github' | null) => void
+}
+
+const GOOGLE_LOGO = (
+  <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+)
+const FACEBOOK_LOGO = (
+  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#1877F2" aria-hidden="true">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+)
+const GITHUB_LOGO = (
+  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-slate-800 dark:fill-slate-200" aria-hidden="true">
+    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+  </svg>
+)
+
+const SOCIAL_PROVIDERS = [
+  {
+    id: 'google' as const,
+    name: 'Google',
+    description: 'Sign in with a Google Account (Gmail). Most widely used OAuth provider.',
+    accentColor: 'border-l-[#4285F4]',
+    guideHeaderBg: 'from-[#4285F4]/10 via-[#34A853]/5 to-transparent',
+    badgeActive: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20',
+    badgeOff: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+    docsUrl: 'https://console.cloud.google.com/apis/credentials',
+    docsLabel: 'Google Cloud Console',
+    logo: GOOGLE_LOGO,
+    setupSteps: [
+      { text: 'Open your Supabase Dashboard → Authentication → Providers → Google and toggle it on.' },
+      { text: 'Go to Google Cloud Console → APIs & Services → Credentials → Create Credentials → OAuth Client ID.', link: { label: 'Open Google Cloud Console →', url: 'https://console.cloud.google.com/apis/credentials' } },
+      { text: 'Copy the Supabase Callback URL below and paste it into Authorized Redirect URIs in Google Cloud.' },
+      { text: 'Back in Supabase, paste the Client ID and Client Secret into the Google provider settings and save.' },
+    ],
+  },
+  {
+    id: 'facebook' as const,
+    name: 'Facebook',
+    description: 'Sign in with a Facebook account. Reaches a broad social media audience.',
+    accentColor: 'border-l-[#1877F2]',
+    guideHeaderBg: 'from-[#1877F2]/10 via-[#1877F2]/5 to-transparent',
+    badgeActive: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20',
+    badgeOff: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+    docsUrl: 'https://developers.facebook.com/',
+    docsLabel: 'Facebook Developers',
+    logo: FACEBOOK_LOGO,
+    setupSteps: [
+      { text: 'Open your Supabase Dashboard → Authentication → Providers → Facebook and toggle it on.' },
+      { text: 'Go to Facebook Developers, create/select an app, then open Facebook Login → Settings.', link: { label: 'Open Facebook Developers →', url: 'https://developers.facebook.com/' } },
+      { text: 'Copy the Supabase Callback URL below and paste it into Valid OAuth Redirect URIs.' },
+      { text: 'Copy the App ID and App Secret from Facebook into your Supabase Facebook provider settings.' },
+    ],
+  },
+  {
+    id: 'github' as const,
+    name: 'GitHub',
+    description: 'Sign in with a GitHub account. Ideal for developer-focused applications.',
+    accentColor: 'border-l-slate-800 dark:border-l-slate-400',
+    guideHeaderBg: 'from-slate-800/10 via-slate-800/5 to-transparent dark:from-slate-400/10 dark:via-slate-400/5',
+    badgeActive: 'bg-slate-900/5 dark:bg-slate-100/5 text-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-600',
+    badgeOff: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+    docsUrl: 'https://github.com/settings/developers',
+    docsLabel: 'GitHub Developer Settings',
+    logo: GITHUB_LOGO,
+    setupSteps: [
+      { text: 'Open your Supabase Dashboard → Authentication → Providers → GitHub and toggle it on.' },
+      { text: 'Go to GitHub → Settings → Developer Settings → OAuth Apps → New OAuth App.', link: { label: 'Open GitHub Developer Settings →', url: 'https://github.com/settings/developers' } },
+      { text: 'Copy the Supabase Callback URL below and paste it into Authorization callback URL.' },
+      { text: 'Generate a client secret in GitHub, then paste the Client ID and Secret into Supabase.' },
+    ],
+  },
+] as const
+
+function SocialLoginPanel({
+  socialLoginEnabled, providers,
+  isSocialLoginSaving, savingProvider,
+  setSocialLoginEnabled, setProviderEnabled,
+  setIsSocialLoginSaving, setSavingProvider,
+}: SocialLoginPanelProps) {
+  const [guideOpen, setGuideOpen] = useState<'google' | 'facebook' | 'github' | null>(null)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const supabaseCallbackUrl = `${window.location.origin}/auth/callback`
+
+  const handleCopyCallback = () => {
+    navigator.clipboard.writeText(supabaseCallbackUrl).then(() => {
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 2000)
+    })
+  }
+
+  const enabledMap = providers
+  const activeGuide = SOCIAL_PROVIDERS.find(p => p.id === guideOpen)
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+      {/* Header + master toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Share2 size={18} className="text-blue-500" /> Social Login Providers
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Control which OAuth providers appear on the login page. Changes take effect immediately.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs font-semibold text-slate-500">
+            {socialLoginEnabled ? 'All providers enabled' : 'All providers off'}
+          </span>
+          {isSocialLoginSaving && <Loader2 size={14} className="animate-spin text-slate-400" />}
+          <button
+            id="toggle-social-login-master"
+            onClick={async () => {
+              setIsSocialLoginSaving(true)
+              const ok = await setSocialLoginEnabled(!socialLoginEnabled)
+              setIsSocialLoginSaving(false)
+              toast[ok ? 'success' : 'error'](ok
+                ? (socialLoginEnabled ? 'Social logins disabled' : 'Social logins enabled')
+                : 'Failed to update social login setting')
+            }}
+            disabled={isSocialLoginSaving}
+            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+              socialLoginEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'
+            } disabled:opacity-60`}
+            aria-label="Toggle all social logins"
+            role="switch"
+            aria-checked={socialLoginEnabled}
+          >
+            <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${
+              socialLoginEnabled ? 'translate-x-8' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Provider cards */}
+      <div className="grid grid-cols-1 gap-3">
+        {SOCIAL_PROVIDERS.map((provider) => {
+          const enabled = enabledMap[provider.id]
+          const isActive = socialLoginEnabled && enabled
+          const isSaving = savingProvider === provider.id
+          return (
+            <div
+              key={provider.id}
+              className={`relative flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-l-4 transition-all duration-300 ${
+                provider.accentColor
+              } ${
+                isActive
+                  ? 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                  : 'bg-slate-50/50 dark:bg-slate-950/50 border-slate-200/60 dark:border-slate-800/60 opacity-70'
+              }`}
+            >
+              {/* Logo + name */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center shrink-0 shadow-sm">
+                  {provider.logo}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">{provider.name}</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                      isActive ? provider.badgeActive : provider.badgeOff
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-current' : 'bg-current opacity-40'}`} />
+                      {!socialLoginEnabled ? 'Master off' : enabled ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed truncate">{provider.description}</p>
+                </div>
+              </div>
+
+              {/* Setup Guide chip */}
+              <button
+                id={`btn-setup-guide-${provider.id}`}
+                type="button"
+                onClick={() => setGuideOpen(provider.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors shrink-0"
+              >
+                <HelpCircle size={12} />
+                Setup Guide
+              </button>
+
+              {/* Toggle */}
+              <div className="flex items-center gap-2 shrink-0">
+                {isSaving && <Loader2 size={14} className="animate-spin text-slate-400" />}
+                <button
+                  id={`toggle-social-${provider.id}`}
+                  disabled={isSaving || !socialLoginEnabled}
+                  onClick={async () => {
+                    setSavingProvider(provider.id)
+                    const ok = await setProviderEnabled(provider.id, !enabled)
+                    setSavingProvider(null)
+                    toast[ok ? 'success' : 'error'](ok
+                      ? `${provider.name} ${enabled ? 'disabled' : 'enabled'}`
+                      : `Failed to update ${provider.name}`)
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    enabled && socialLoginEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={`Toggle ${provider.name}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                    enabled ? 'translate-x-[26px]' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Supabase config note */}
+      <div className="flex items-start gap-2.5 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl">
+        <Info size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+          <strong>Supabase configuration required:</strong> Each provider must also be enabled in your Supabase Dashboard → Authentication → Providers with valid credentials. Toggling here only controls UI visibility.
+        </p>
+      </div>
+
+      {/* ── Setup Guide Modal ── */}
+      {guideOpen && activeGuide && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setGuideOpen(null) }}
+        >
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+            {/* Modal header */}
+            <div className={`bg-gradient-to-br ${activeGuide.guideHeaderBg} dark:from-slate-800/80 px-6 pt-6 pb-5 border-b border-slate-100 dark:border-slate-800`}>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm shrink-0">
+                  {activeGuide.logo}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-slate-900 dark:text-white text-base leading-tight">
+                    {activeGuide.name} Setup Guide
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Follow these 4 steps to enable OAuth sign-in</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGuideOpen(null)}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                  aria-label="Close guide"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Steps */}
+            <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+              {activeGuide.setupSteps.map((step, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-sm flex-shrink-0">
+                      {i + 1}
+                    </div>
+                    {i < activeGuide.setupSteps.length - 1 && (
+                      <div className="w-px flex-1 mt-2 bg-slate-200 dark:bg-slate-700 min-h-[20px]" />
+                    )}
+                  </div>
+                  <div className="pb-1 flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{step.text}</p>
+                    {'link' in step && step.link && (
+                      <a
+                        href={step.link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {step.link.label}
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Copy-able callback URL */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Your Supabase Callback URL</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs text-slate-800 dark:text-slate-200 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 truncate select-all">
+                    {supabaseCallbackUrl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopyCallback}
+                    id={`copy-callback-url-${activeGuide.id}`}
+                    className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                      copiedUrl
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {copiedUrl
+                      ? <><CheckCircle2 size={12} /> Copied!</>
+                      : <><Download size={12} /> Copy</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-5 pt-2 flex items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800">
+              <a
+                href={activeGuide.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 font-medium"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Open {activeGuide.docsLabel}
+              </a>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(null)}
+                className="px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-semibold rounded-xl hover:opacity-90 active:scale-95 transition-all"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user } = useAuthStore()
   const { theme, setTheme, themeColor, setThemeColor } = useThemeStore()
+  const { prefs: systemPrefs, setPrefs: setSystemPrefs } = useSystemPrefsStore()
   const { currency, setCurrency } = useCurrencyStore()
   const { distanceUnit, volumeUnit, weightUnit, setDistanceUnit, setVolumeUnit, setWeightUnit } = useUnitsStore()
   const { isMaintenanceMode, setMaintenanceMode } = useMaintenanceModeStore()
   const { isInstallable, isInstalled, promptInstall } = usePWAStore()
-  const { socialLoginEnabled, setSocialLoginEnabled, fetch: fetchSocialLogin } = useSocialLoginStore()
+  const {
+    socialLoginEnabled, setSocialLoginEnabled,
+    providers,
+    setProviderEnabled,
+    fetch: fetchSocialLogin
+  } = useSocialLoginStore()
   const [isSocialLoginSaving, setIsSocialLoginSaving] = useState(false)
+  const [savingProvider, setSavingProvider] = useState<'google' | 'facebook' | 'github' | null>(null)
   const {
     biometricEnabled,
     isSupported: biometricSupported,
@@ -109,6 +469,7 @@ export default function Settings() {
     checkSupport,
     fetch: fetchBiometric,
   } = useBiometricStore()
+  const { settingsOrder } = useModuleOrderStore()
   const [isBiometricSaving, setIsBiometricSaving] = useState(false)
   const [biometricRegLoading, setBiometricRegLoading] = useState(false)
   const [isMaintenanceSaving, setIsMaintenanceSaving] = useState(false)
@@ -367,6 +728,7 @@ export default function Settings() {
     const baseTabs = [
       { id: 'profile', label: 'Profile Information', icon: User },
       { id: 'security', label: 'Security & Auth', icon: Shield },
+      { id: 'ai_settings', label: 'AI Assistant', icon: Bot },
       { id: 'preferences', label: 'Preferences', icon: Palette },
       { id: 'currency', label: 'Currency & SI Units', icon: DollarSign },
       { id: 'sessions', label: 'Active Sessions', icon: Monitor }
@@ -383,9 +745,19 @@ export default function Settings() {
       filtered.push({ id: 'audit_log', label: 'Audit Log', icon: ClipboardList })
       filtered.push({ id: 'backup', label: 'Backup & Export', icon: Database })
       filtered.push({ id: 'system_info', label: 'System Info', icon: Info })
+      filtered.push({ id: 'module_order', label: 'Module Order', icon: RefreshCw })
     }
+
+    const orderMap = new Map(settingsOrder.map((id, index) => [id, index]))
+    
+    filtered.sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999
+      return idxA - idxB
+    })
+
     return filtered
-  }, [profile.role, checkAccess, subPermissions])
+  }, [profile.role, checkAccess, subPermissions, settingsOrder])
 
   useEffect(() => {
     if (tabs.length > 0 && !tabs.find(t => t.id === activeTab)) {
@@ -534,6 +906,24 @@ export default function Settings() {
   const handleEnrollMfa = async () => {
     setIsMfaLoading(true)
     try {
+      // Unenroll ALL existing TOTP factors before enrolling fresh.
+      // listFactors() may not expose unverified ghost factors via the typed API,
+      // so we also hit the 'all' list and clean up everything we can find.
+      const { data: existing } = await supabase.auth.mfa.listFactors()
+      if (existing) {
+        const allFactors = [
+          ...(existing.totp ?? []),
+          ...((existing as any).all ?? []),
+        ]
+        // Deduplicate by factor id
+        const seen = new Set<string>()
+        for (const factor of allFactors) {
+          if (seen.has(factor.id)) continue
+          seen.add(factor.id)
+          await supabase.auth.mfa.unenroll({ factorId: factor.id })
+        }
+      }
+
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (error) throw error
       setMfaFactorId(data.id)
@@ -805,6 +1195,10 @@ export default function Settings() {
           <ReportExportTab />
         )}
 
+        {activeTab === 'module_order' && (
+          <ModuleOrderTab />
+        )}
+
           {activeTab === 'security' && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
               <SectionHelpGuide
@@ -879,6 +1273,34 @@ export default function Settings() {
                       Enabled
                     </span>
                   )}
+                </div>
+
+                {/* ── Authenticator App Guide ── */}
+                <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50/60 dark:bg-blue-950/20 p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Smartphone size={15} className="text-blue-500 shrink-0" />
+                    <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wide">How to use an Authenticator App</span>
+                  </div>
+                  <ol className="space-y-2.5 pl-1">
+                    {[
+                      { step: '1', text: 'Download a free authenticator app on your phone — Google Authenticator or Authy are recommended.' },
+                      { step: '2', text: 'Click "Enable Two-Factor Authentication" below to generate your unique QR code.' },
+                      { step: '3', text: 'Open the authenticator app, tap the + icon, and choose "Scan a QR code".' },
+                      { step: '4', text: 'Point your camera at the QR code shown on screen. Your account will be added instantly.' },
+                      { step: '5', text: 'Enter the 6-digit code shown in the app to verify and activate 2FA on your account.' },
+                    ].map(({ step, text }) => (
+                      <li key={step} className="flex items-start gap-2.5">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">{step}</span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{text}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="pt-1 border-t border-blue-200/60 dark:border-blue-500/10 flex flex-wrap gap-x-4 gap-y-1">
+                    <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Recommended apps:</span>
+                    <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-500 underline underline-offset-2 hover:text-blue-700 transition-colors">Google Authenticator</a>
+                    <a href="https://authy.com/download/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-500 underline underline-offset-2 hover:text-blue-700 transition-colors">Authy</a>
+                    <a href="https://www.microsoft.com/en-us/security/mobile-authenticator-app" target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-500 underline underline-offset-2 hover:text-blue-700 transition-colors">Microsoft Authenticator</a>
+                  </div>
                 </div>
 
                 {!mfaEnrolled && !mfaQrCode && (
@@ -1068,77 +1490,18 @@ export default function Settings() {
                 </div>
               )}
 
-              {/* Social Login Toggle — admin only */}
+              {/* Social Login Management — admin only */}
               {profile.role === 'admin' && (
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Share2 size={18} className="text-blue-500" /> Social Logins
-                      </h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        {socialLoginEnabled
-                          ? 'Google and Facebook sign-in buttons are shown on the login page.'
-                          : 'Social sign-in is hidden. Users must log in with email and password.'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {isSocialLoginSaving && <Loader2 size={16} className="animate-spin text-slate-400" />}
-                      <button
-                        onClick={async () => {
-                          setIsSocialLoginSaving(true)
-                          const ok = await setSocialLoginEnabled(!socialLoginEnabled)
-                          setIsSocialLoginSaving(false)
-                          if (ok) {
-                            toast.success(socialLoginEnabled ? 'Social logins disabled' : 'Social logins enabled')
-                          } else {
-                            toast.error('Failed to update social login setting')
-                          }
-                        }}
-                        disabled={isSocialLoginSaving}
-                        className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                          socialLoginEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'
-                        } disabled:opacity-60`}
-                        aria-label="Toggle social logins"
-                        role="switch"
-                        aria-checked={socialLoginEnabled}
-                      >
-                        <div
-                          className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${
-                            socialLoginEnabled ? 'translate-x-8' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <div className="flex flex-wrap gap-3">
-                      <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
-                        socialLoginEnabled
-                          ? 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
-                          : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 line-through'
-                      }`}>
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        Google
-                      </div>
-                      <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${
-                        socialLoginEnabled
-                          ? 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
-                          : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 line-through'
-                      }`}>
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="#1877F2" aria-hidden="true">
-                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                        </svg>
-                        Facebook
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <SocialLoginPanel
+                  socialLoginEnabled={socialLoginEnabled}
+                  providers={providers}
+                  isSocialLoginSaving={isSocialLoginSaving}
+                  savingProvider={savingProvider}
+                  setSocialLoginEnabled={setSocialLoginEnabled}
+                  setProviderEnabled={setProviderEnabled}
+                  setIsSocialLoginSaving={setIsSocialLoginSaving}
+                  setSavingProvider={setSavingProvider}
+                />
               )}
             </div>
           )}
@@ -1247,6 +1610,28 @@ export default function Settings() {
                         {themeColor === c.id && <Check size={16} className="text-white" />}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-6 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Interface Preferences</h4>
+                  <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                    <div>
+                      <div className="font-semibold text-sm text-slate-900 dark:text-white">Scroll to Top Button</div>
+                      <div className="text-xs text-slate-500">Show a button to quickly scroll back to the top of the page</div>
+                    </div>
+                    <button
+                      onClick={() => setSystemPrefs({ showScrollToTop: !systemPrefs.showScrollToTop })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        systemPrefs.showScrollToTop ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          systemPrefs.showScrollToTop ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1978,6 +2363,10 @@ export default function Settings() {
               />
               <SystemInfoTab />
             </div>
+          )}
+
+          {activeTab === 'ai_settings' && (
+            <AiSettingsTab />
           )}
 
         </div>

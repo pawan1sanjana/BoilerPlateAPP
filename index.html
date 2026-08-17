@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Preconnect to Supabase so TCP+TLS handshake starts before JS executes -->
+    <link rel="preconnect" href="https://sshxihwwxfupplyrhrfk.supabase.co" crossorigin>
+    <link rel="dns-prefetch" href="https://sshxihwwxfupplyrhrfk.supabase.co">
+
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
@@ -10,16 +15,59 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BoilerplateApp">
-    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-192x192.png">
     <link rel="mask-icon" href="/icon-512x512.png" color="#3b82f6">
     <!-- Android native app feel tags -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>BoilerplateApp</title>
+
+    <!-- Inline critical CSS: shows a skeleton instantly while JS bundle downloads -->
+    <style>
+      *,*::before,*::after{box-sizing:border-box}
+      body{margin:0;font-family:system-ui,sans-serif;background:#f8fafc}
+      @media(prefers-color-scheme:dark){body{background:#020617}}
+      #app-shell{
+        display:flex;flex-direction:column;align-items:center;
+        justify-content:center;height:100svh;width:100%;gap:16px;
+      }
+      #app-shell-icon{
+        width:48px;height:48px;border-radius:12px;
+        background:linear-gradient(135deg,#3b82f6,#6366f1);
+        animation:pulse 1.4s ease-in-out infinite;
+      }
+      #app-shell-text{
+        font-size:14px;font-weight:500;
+        color:#94a3b8;letter-spacing:.01em;
+      }
+      @keyframes pulse{
+        0%,100%{opacity:1;transform:scale(1)}
+        50%{opacity:.55;transform:scale(.96)}
+      }
+    </style>
   </head>
   <body>
+    <!-- Visible immediately — replaced by React once bundle is ready -->
+    <div id="app-shell" aria-hidden="true">
+      <div id="app-shell-icon"></div>
+      <span id="app-shell-text">Loading…</span>
+    </div>
+
     <div id="root"></div>
+    <script>
+      // Hide skeleton as soon as React mounts
+      document.addEventListener('DOMContentLoaded', function() {
+        var ro = new MutationObserver(function() {
+          var root = document.getElementById('root');
+          if (root && root.firstChild) {
+            var shell = document.getElementById('app-shell');
+            if (shell) shell.style.display = 'none';
+            ro.disconnect();
+          }
+        });
+        ro.observe(document.getElementById('root'), { childList: true });
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

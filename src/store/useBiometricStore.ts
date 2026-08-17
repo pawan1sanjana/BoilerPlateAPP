@@ -71,11 +71,16 @@ export const useBiometricStore = create<BiometricState>((set) => ({
       
       // 2. Fetch if user has passkeys
       let hasPasskey = false
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const { data: passkeys } = await supabase.auth.passkey.list()
-        if (passkeys && passkeys.length > 0) {
-          hasPasskey = true
+      const { data: sessionData } = await supabase.auth.getSession()
+      
+      if (sessionData?.session) {
+        try {
+          const { data: passkeys, error } = await supabase.auth.passkey.list()
+          if (!error && passkeys && passkeys.length > 0) {
+            hasPasskey = true
+          }
+        } catch (e) {
+          // Ignore 404 errors if passkeys are not enabled on this Supabase project
         }
       }
 

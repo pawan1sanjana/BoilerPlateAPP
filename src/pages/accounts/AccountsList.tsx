@@ -5,8 +5,15 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
+import { useAuthStore } from '@/store/useAuthStore';
+import { isAdmin, canManageUsers } from '@/lib/roleUtils';
+import type { AppRole } from '@/store/useModulePermissionsStore';
 
 export default function AccountsList() {
+  const { profile } = useAuthStore();
+  const role = profile?.role as AppRole | null;
+  const canManage = canManageUsers(role);
+
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
@@ -24,12 +31,13 @@ export default function AccountsList() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch total count for active tab
-      const { count, error: countError } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', activeTab);
-        
+      // Build base query — only show accounts that are not tied to an estate
+      const buildQuery = () => {
+        let q = supabase.from('users').select('*', { count: 'exact', head: true }).eq('status', activeTab).is('estate_id', null);
+        return q;
+      };
+
+      const { count, error: countError } = await buildQuery();
       if (countError) throw countError;
       setTotalCount(count || 0);
 
@@ -37,13 +45,15 @@ export default function AccountsList() {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      const { data, error } = await supabase
+      let dataQuery = supabase
         .from('users')
         .select('*')
         .eq('status', activeTab)
+        .is('estate_id', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
+      const { data, error } = await dataQuery;
       if (error) throw error;
       
       const mappedUsers = data?.map(u => ({
@@ -58,14 +68,12 @@ export default function AccountsList() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, pageSize]);
+  }, [activeTab, page, pageSize, role, profile?.estate_id]);
 
   const fetchPendingCount = async () => {
     try {
-      const { count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+      let q = supabase.from('users').select('*', { count: 'exact', head: true }).eq('status', 'pending').is('estate_id', null);
+      const { count } = await q;
       setPendingCount(count || 0);
     } catch (err) {
       console.error("Failed to fetch pending count", err);
@@ -178,14 +186,18 @@ export default function AccountsList() {
       cellClassName: "text-right sticky right-0 bg-white dark:bg-slate-950 shadow-[-5px_0_10px_rgba(0,0,0,0.02)]",
       cell: (user) => (
         <div className="flex justify-end gap-2">
-          <Link 
-            to={`/accounts/edit/${user.id}`}
-            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-            title="Edit User"
-          >
-            <Edit size={18} />
-          </Link>
-          {user.status === 'pending' && (
+          {/* Edit — admin and estate_manager only */}
+          {canManage && (
+            <Link 
+              to={`/accounts/edit/${user.id}`}
+              className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+              title="Edit User"
+            >
+              <Edit size={18} />
+            </Link>
+          )}
+          {/* Approve pending — managers only */}
+          {canManage && user.status === 'pending' && (
             <button 
               onClick={() => openConfirmModal('approve', user)}
               className="p-2 rounded-lg transition-colors text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
@@ -194,7 +206,8 @@ export default function AccountsList() {
               <CheckCircle2 size={18} />
             </button>
           )}
-          {user.status !== 'pending' && (
+          {/* Archive / Unarchive — managers only */}
+          {canManage && user.status !== 'pending' && (
             <button 
               onClick={() => openConfirmModal(user.status === 'active' ? 'archive' : 'unarchive', user)}
               className={`p-2 rounded-lg transition-colors ${
@@ -207,7 +220,8 @@ export default function AccountsList() {
               <Archive size={18} />
             </button>
           )}
-          {user.status === 'active' && (
+          {/* Force Logout — managers only */}
+          {canManage && user.status === 'active' && (
             <button 
               onClick={() => openConfirmModal('force-logout', user)}
               className="p-2 rounded-lg transition-colors text-slate-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"
@@ -216,13 +230,20 @@ export default function AccountsList() {
               <LogOut size={18} />
             </button>
           )}
-          <button 
-            onClick={() => openConfirmModal('delete', user)}
-            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-            title="Delete User permanently"
-          >
-            <Trash2 size={18} />
-          </button>
+          {/* Delete — admin only */}
+          {isAdmin(role) && (
+            <button 
+              onClick={() => openConfirmModal('delete', user)}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              title="Delete User permanently"
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
+          {/* Read-only indicator for non-managers */}
+          {!canManage && (
+            <span className="text-xs text-slate-400 px-2 py-1">View only</span>
+          )}
         </div>
       )
     }
@@ -238,12 +259,15 @@ export default function AccountsList() {
           </h1>
           <p className="text-sm text-slate-500 mt-1">Manage system access, roles, and user profiles.</p>
         </div>
-        <div className="flex gap-3">
-          <Link to="/accounts/new" className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-sm hover:shadow-blue-500/30 flex items-center gap-2">
-            <UserPlus size={18} />
-            Register User
-          </Link>
-        </div>
+        {/* Register User — admin only (estate users are added via EstateDetail invite modal) */}
+        {isAdmin(role) && (
+          <div className="flex gap-3">
+            <Link to="/accounts/new" className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-sm hover:shadow-blue-500/30 flex items-center gap-2">
+              <UserPlus size={18} />
+              Register User
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-6 border-b border-slate-200 dark:border-slate-800">
